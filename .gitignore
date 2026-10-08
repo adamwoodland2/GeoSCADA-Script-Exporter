@@ -1,0 +1,13 @@
+References/
+.claude/
+
+# Generated output (exported scripts may contain sensitive information)
+ScriptExport/
+*.txt
+*.csv
+
+# Editor / OS cruft
+.vs/
+.vscode/
+Thumbs.db
+desktop.ini
