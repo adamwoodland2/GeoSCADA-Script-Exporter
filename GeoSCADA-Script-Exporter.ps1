@@ -16,8 +16,8 @@
 
 .DESCRIPTION
     The script connects with ClearScada.Client.dll, logs on, and lists the CMimic and
-    CScriptLibrary objects with SQL, plus those inside template definitions (which SQL does not
-    return) with IObjectHierarchy.ListObjects per template. For each one:
+    CScriptLibrary objects with SQL (SELECT WITH TEMPLATES, so objects inside template
+    definitions are included). For each one:
 
       Mimics (CMimic)
         IObjectConfiguration.GetWebDocumentContent() returns the mimic definition as XML (the
@@ -107,7 +107,7 @@
     Accept the usage disclaimer non-interactively (required in non-interactive sessions).
 
 .EXAMPLE
-    .\GeoSCADA-Script-Exporter.ps1 -OutputFolder C:\Temp\Scripts -Username adamwoodland -Password 'secret'
+    .\GeoSCADA-Script-Exporter.ps1 -OutputFolder C:\Temp\Scripts -Username operator -Password 'secret'
 
 .EXAMPLE
     .\GeoSCADA-Script-Exporter.ps1 -Server scada01 -Credential (Get-Credential) -Group 'Sewage.Site' -OutputFolder C:\Temp\Scripts -AcceptDisclaimer
@@ -149,8 +149,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$ExporterVersion = '1.0.0'
-$FormatVersion   = 1
+$ExporterVersion = '1.1.0'
+$FormatVersion   = 2
 
 # Resolve the output path here (not in the param default) so it works even when
 # $PSScriptRoot is empty - e.g. running a selection (F8) or dot-sourcing.
@@ -305,6 +305,15 @@ public static class GeoScadaScriptDoc {
 "@
 }
 
+$script:ProgressClock = [System.Diagnostics.Stopwatch]::StartNew()
+function Show-Progress([string]$Activity, [string]$Status, [int]$Percent = -1) {
+    <# At most one Write-Progress every 2 s of work: in some hosts each call itself takes seconds. #>
+    if ($script:ProgressClock.ElapsedMilliseconds -lt 2000) { return }
+    if ($Percent -ge 0) { Write-Progress -Activity $Activity -Status $Status -PercentComplete $Percent }
+    else { Write-Progress -Activity $Activity -Status $Status }
+    $script:ProgressClock.Restart()      # after the call, so a slow call does not count as work time
+}
+
 # --- Text helpers -----------------------------------------------------------
 function ConvertTo-CrLf([string]$Text) {
     if ($null -eq $Text) { return '' }
@@ -317,9 +326,9 @@ function Get-LineCount([string]$Text) {
 }
 
 function ConvertTo-HeaderValue($Value) {
-    <# Header values are single-line. #>
+    <# Header values are single-line. Not trimmed: Geo SCADA names can end in a space. #>
     if ($null -eq $Value) { return '' }
-    return (([string]$Value) -replace "[`r`n]+", ' ').Trim()
+    return (([string]$Value) -replace "[`r`n]+", ' ')
 }
 
 function Format-ConfigTime($Value) {
@@ -344,7 +353,8 @@ function Resolve-RelativeName {
 
 # --- File naming ------------------------------------------------------------
 $script:UsedFileNames = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-$ReservedNames = '^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])$'
+# Windows device names, also reserved with an extension ("CON.Child.txt") or trailing spaces ("CON .x").
+$ReservedNames = '^(CON|PRN|AUX|NUL|COM[0-9¹²³]|LPT[0-9¹²³])\s*(\.|$)'
 
 function Get-ExportFileName {
     <# The object's full name made safe for Windows; unique within this run (case-insensitive). #>
@@ -374,21 +384,60 @@ function Write-TextFile([string]$Path, [string]$Text) {
 function New-ExportText {
     <#
       Builds the file: header lines (each prefixed with the language's comment token) between the
-      BEGIN/END markers, then the script. Header entries are an ordered list of Key/Value pairs; a
-      key may repeat (Library, PickAction ...). ScriptStartLine is computed and added last.
+      BEGIN/END markers, then the script, then one section per inline pick-action script:
+          <comment> ===== GEOSCADA-SCRIPT-EXPORT PICKACTION <n> =====
+          <code>
+      Header entries are an ordered list of Key/Value pairs; a key may repeat (Library, PickAction ...).
+      PickActionCode, ScriptStartLine and ScriptEndLine are computed here and added last.
     #>
-    param([string]$Comment, [System.Collections.ArrayList]$Entries, [string]$Script)
+    param([string]$Comment, [System.Collections.ArrayList]$Entries, [string]$Script, $Sections = @())
+    $body      = ConvertTo-CrLf $Script
+    $bodyLines = Get-LineCount $body
+    $sectionCount = if ($null -ne $Sections) { $Sections.Count } else { 0 }
+    $headerCount = 1 + $Entries.Count + $sectionCount + 3               # BEGIN, entries, PickActionCode, Start, End, END
+    $scriptStart = $headerCount + 1
+    $scriptEnd   = $scriptStart + $bodyLines - 1
+    $next = $scriptEnd + 1                                               # line of the next section marker
+    $codeEntries = New-Object System.Collections.Generic.List[string]
+    $sectionText = New-Object System.Collections.Generic.List[string]
+    foreach ($s in $Sections) {
+        $code = ConvertTo-CrLf $s.Code
+        $cl = Get-LineCount $code
+        $codeEntries.Add("$Comment PickActionCode: $($s.Id) | $($next + 1) | $($next + $cl)")
+        $sectionText.Add("$Comment ===== GEOSCADA-SCRIPT-EXPORT PICKACTION $($s.Id) =====")
+        if ($cl) { $sectionText.Add($code) }
+        $next += 1 + $cl
+    }
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add("$Comment ===== GEOSCADA-SCRIPT-EXPORT BEGIN =====")
     foreach ($e in $Entries) { $lines.Add("$Comment $($e.Key): $(ConvertTo-HeaderValue $e.Value)") }
-    $scriptStart = $lines.Count + 3      # this line, the END marker, then the script
+    foreach ($c in $codeEntries) { $lines.Add($c) }
     $lines.Add("$Comment ScriptStartLine: $scriptStart")
+    $lines.Add("$Comment ScriptEndLine: $scriptEnd")
     $lines.Add("$Comment ===== GEOSCADA-SCRIPT-EXPORT END =====")
-    $body = ConvertTo-CrLf $Script
-    return (($lines -join "`r`n") + "`r`n" + $body)
+    if ($bodyLines) { $lines.Add($body) }
+    foreach ($t in $sectionText) { $lines.Add($t) }
+    return ($lines -join "`r`n")
 }
 
 function Add-Entry([System.Collections.ArrayList]$List, [string]$Key, $Value) { [void]$List.Add([pscustomobject]@{ Key = $Key; Value = $Value }) }
+
+# Spreadsheet formula-injection guard for the manifest. Names, users and messages come from the database;
+# a text cell starting with = + - @ (or tab / CR) would be evaluated by Excel, so it is written with a
+# leading ' (shown as text). GeoSCADA-Script-Analyser.ps1 removes the ' again when it reads the manifest.
+function ConvertTo-SafeCsvRow {
+    process {
+        $row = $_; $copy = $null
+        foreach ($p in $row.PSObject.Properties) {
+            $v = $p.Value
+            if ($v -is [string] -and $v.Length -and "=+-@`t`r".IndexOf($v[0]) -ge 0) {
+                if (-not $copy) { $copy = $row.PSObject.Copy() }
+                $copy.($p.Name) = "'" + $v
+            }
+        }
+        if ($copy) { $copy } else { $row }
+    }
+}
 
 # --- Geo SCADA API helpers -----------------------------------------------
 function Resolve-ClientDll {
@@ -415,40 +464,17 @@ function Invoke-GeoQuery {
     } finally { $q.Dispose() }
 }
 
-$script:TemplateIds = $null
 function Get-ObjectList([string]$Class) {
-    <#
-      SQL does not return objects inside template definitions, so those are listed separately:
-      every template (CTemplate is visible to SQL) is asked for its objects of this class with
-      IObjectHierarchy.ListObjects, and their configuration details are read from the object.
-    #>
-    $rows = Invoke-GeoQuery "SELECT Id, FullName, ConfigVersion, ConfigTime, ConfigUser, ParentTemplateId, ParentInstanceId FROM $Class ORDER BY FullName"
-    $byId = @{}
-    foreach ($d in $rows) {
-        $byId[[int]$d[0]] = [pscustomobject]@{
-            Id = [int]$d[0]; FullName = [string]$d[1]; Class = $Class; InTemplate = $false
+    <# WITH TEMPLATES includes objects inside template definitions, which a plain SELECT leaves out. #>
+    $rows = Invoke-GeoQuery "SELECT WITH TEMPLATES Id, FullName, ConfigVersion, ConfigTime, ConfigUser, ParentTemplateId, ParentInstanceId FROM $Class ORDER BY FullName"
+    $list = foreach ($d in $rows) {
+        [pscustomobject]@{
+            Id = [int]$d[0]; FullName = [string]$d[1]; Class = $Class; InTemplate = ([int]$d[5] -gt 0)
             ConfigVersion = $d[2]; ConfigTime = (Format-ConfigTime $d[3]); ConfigUser = [string]$d[4]
             TemplateId = [int]$d[5]; InstanceId = [int]$d[6]
         }
     }
-
-    if ($null -eq $script:TemplateIds) {
-        $script:TemplateIds = @(Invoke-GeoQuery 'SELECT Id FROM CTemplate' | ForEach-Object { [int]$_[0] })
-    }
-    foreach ($tid in $script:TemplateIds) {
-        $found = $script:Conn.Server.ListObjects($Class, '', (New-Object ClearScada.Client.ObjectId($tid)), $false)
-        foreach ($od in $found) {
-            $id = $od.Id.ToInt32()
-            if ($byId.ContainsKey($id) -or -not (Test-InScope $od.FullName)) { continue }
-            $o = $script:Conn.GetObject($od.Id)
-            $byId[$id] = [pscustomobject]@{
-                Id = $id; FullName = [string]$od.FullName; Class = $Class; InTemplate = $true
-                ConfigVersion = $o['ConfigVersion']; ConfigTime = (Format-ConfigTime $o['ConfigTime']); ConfigUser = [string]$o['ConfigUser']
-                TemplateId = $od.TemplateId.ToInt32(); InstanceId = $od.InstanceId.ToInt32()
-            }
-        }
-    }
-    return @($byId.Values | Where-Object { Test-InScope $_.FullName } | Sort-Object FullName)
+    return @($list | Where-Object { Test-InScope $_.FullName })
 }
 
 function Test-InScope([string]$FullName) {
@@ -558,12 +584,24 @@ function Get-MimicScriptInfo([System.Xml.XmlDocument]$Xml) {
         $info.Libraries = $libs
     }
 
-    # Pick actions that call a script function: <Action type="scriptCall">FunctionName<StdArguments>...</StdArguments></Action>
+    # Pick actions that run script:
+    #   scriptCall     - calls a named function in this mimic's script  <Action type="scriptCall">Name<StdArguments>...</StdArguments></Action>
+    #   scriptCode     - inline code, run in this mimic                  <Action type="scriptCode">code</Action>
+    #   scriptTopLevel - inline code, run in the topmost mimic           <Action type="scriptTopLevel">code</Action>
     $acts = @()
     foreach ($a in $root.SelectNodes('//Action')) {
         $type = $a.GetAttribute('type')
         if ($type -notmatch 'script') { continue }
-        $fn = (($a.ChildNodes | Where-Object { $_.NodeType -eq 'Text' -or $_.NodeType -eq 'CDATA' } | ForEach-Object { $_.Value }) -join '').Trim()
+        $text = ''; $afterElement = $false
+        foreach ($c in $a.ChildNodes) {
+            if ($c.NodeType -eq [System.Xml.XmlNodeType]::Element) { $afterElement = $true; $text = '' }
+            elseif ($c.NodeType -in @([System.Xml.XmlNodeType]::Text, [System.Xml.XmlNodeType]::CDATA,
+                                       [System.Xml.XmlNodeType]::Whitespace, [System.Xml.XmlNodeType]::SignificantWhitespace)) { $text += $c.Value }
+        }
+        if ($afterElement) { if ($text.StartsWith("`r`n")) { $text = $text.Substring(2) } elseif ($text.StartsWith("`n")) { $text = $text.Substring(1) } }
+        $context = switch ($type) { 'scriptCall' { 'Current' } 'scriptCode' { 'Current' } 'scriptTopLevel' { 'TopLevel' } default { 'Unknown' } }
+        if ($type -eq 'scriptCall') { $fn = $text.Trim(); $code = $null }
+        else { $fn = '(code)'; $code = $text.TrimEnd() }
         $argList = @()
         $std = $a.SelectSingleNode('StdArguments')
         if ($std) {
@@ -574,20 +612,38 @@ function Get-MimicScriptInfo([System.Xml.XmlDocument]$Xml) {
                 $argList += $(if ($anims.ContainsKey($v)) { "$v <= $($anims[$v])" } else { $v })
             }
         }
-        # Where it is: names of the enclosing layer / objects / sub-menus up to the mimic.
-        $path = @(); $n = $a.ParentNode
-        while ($n -and $n -ne $root -and $n.NodeType -eq [System.Xml.XmlNodeType]::Element) {
-            if ($n.LocalName -ne 'PickMenu' -and $n.HasAttribute('name')) {
-                $path = @("$($n.GetAttribute('name'))[$($n.LocalName)]") + $path
-            }
-            $n = $n.ParentNode
-        }
-        $where = if ($path.Count) { $path -join '/' } else { '(mimic)' }
-        $acts += [pscustomobject]@{ Where = $where; Action = $a.GetAttribute('name'); Type = $type; Function = $fn; Args = ($argList -join ', ') }
+        $acts += [pscustomobject]@{ Where = (Get-ElementPath $a.ParentNode $root); Action = $a.GetAttribute('name'); Type = $type
+                                    Context = $context; Function = $fn; Code = $code; Args = ($argList -join ', ') }
     }
     $info.PickActions = $acts
+
+    # Embedded mimics: <EmbeddedMimic name="M_1" ref="SCX:////CMimic/.Test"> (the ref may be relative).
+    $info.Embeds = @(foreach ($em in $root.SelectNodes('//EmbeddedMimic')) {
+        [pscustomobject]@{ Where = (Get-ElementPath $em $root); Ref = $em.GetAttribute('ref') }
+    })
     return $info
 }
+
+function Get-ElementPath($Node, $Root) {
+    <# Names of the enclosing layer / groups / object (and sub-menus) from the mimic down to Node, e.g. "Layer[Layer]/Btn_3[Button]". #>
+    $path = @(); $n = $Node
+    while ($n -and $n -ne $Root -and $n.NodeType -eq [System.Xml.XmlNodeType]::Element) {
+        if ($n.LocalName -ne 'PickMenu' -and $n.HasAttribute('name')) { $path = @("$($n.GetAttribute('name'))[$($n.LocalName)]") + $path }
+        $n = $n.ParentNode
+    }
+    if ($path.Count) { return ($path -join '/') } return '(mimic)'
+}
+
+function Resolve-MimicRef([string]$Ref, [string]$MimicFullName) {
+    <# "SCX:////CMimic/.Test" in "Claude.Default" -> "Claude.Test". Returns '' for an empty (animated) reference. #>
+    if ([string]::IsNullOrWhiteSpace($Ref)) { return '' }
+    $name = $Ref
+    if ($name -match '^[A-Za-z]+:/+[^/]*/(.*)$') { $name = $Matches[1] }
+    elseif ($name.Contains('/')) { $name = $name.Substring($name.LastIndexOf('/') + 1) }
+    return (Resolve-RelativeName -Ref $name -ParentFullName $MimicFullName)
+}
+
+function Format-Field([string]$Value) { <# A ' | '-separated header field must not itself contain the separator. #> return ([string]$Value).Replace(' | ', ' / ') }
 
 # --- Main -----------------------------------------------------------------
 if (-not (Confirm-Disclaimer -Accepted:$AcceptDisclaimer)) { return }
@@ -618,7 +674,7 @@ $exportedAt = [DateTime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')
 $manifest   = New-Object System.Collections.Generic.List[object]
 $written    = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
 $script:Errors = 0
-$stats = [ordered]@{ MimicsScanned = 0; MimicFiles = 0; MimicsWithOwnScript = 0; LibraryFiles = 0; LibrariesEmpty = 0; MissingLibraryLinks = 0; CrossCheckMismatches = 0 }
+$stats = [ordered]@{ MimicsScanned = 0; MimicFiles = 0; MimicsWithOwnScript = 0; LibraryFiles = 0; LibrariesEmpty = 0; MissingLibraryLinks = 0; CrossCheckMismatches = 0; PickActionCode = 0 }
 $libraryUse = @{}     # library full name -> number of in-scope mimics linking to it
 
 function Add-ManifestRow {
@@ -694,7 +750,7 @@ try {
     foreach ($m in $mimics) {
         $i++
         if ($i % 25 -eq 1 -or $i -eq $mimics.Count) {
-            Write-Progress -Activity 'Exporting mimic scripts' -Status "$i of $($mimics.Count): $($m.FullName)" -PercentComplete ([int](100 * $i / [Math]::Max(1, $mimics.Count)))
+            Show-Progress 'Exporting mimic scripts' "$i of $($mimics.Count): $($m.FullName)" ([int](100 * $i / [Math]::Max(1, $mimics.Count)))
         }
         $stats.MimicsScanned++
         try {
@@ -741,14 +797,26 @@ try {
         Add-Entry $e 'LibraryCheck' $(if (-not $CheckMissingLibraries) { 'NotPerformed (XML lists only libraries that exist)' } elseif ($checkNote) { "Incomplete: $checkNote" } else { 'Performed' })
         foreach ($l in $missing) { Add-Entry $e 'LibraryMissing' $l }
         Add-Entry $e 'PickActionCount' $info.PickActions.Count
-        # Always five ' | '-separated fields; Args is last so it may itself contain ' | '.
+        # Seven ' | '-separated fields: N | Where | Action | Type | Context | Function | Args. Args is last so it
+        # may itself contain ' | '. Inline code (Function "(code)") is written to section N after the script.
+        $sections = New-Object System.Collections.Generic.List[object]
+        $k = 0
         foreach ($p in $info.PickActions) {
-            Add-Entry $e 'PickAction' ("{0} | {1} | {2} | {3} | {4}" -f $p.Where, $p.Action, $p.Type, $p.Function, $(if ($p.Args) { $p.Args } else { '(none)' }))
+            $k++
+            Add-Entry $e 'PickAction' ("{0} | {1} | {2} | {3} | {4} | {5} | {6}" -f $k, (Format-Field $p.Where), (Format-Field $p.Action), $p.Type, $p.Context,
+                                       (Format-Field $p.Function), $(if ($p.Args) { $p.Args } else { '(none)' }))
+            if ($null -ne $p.Code) { $sections.Add(@{ Id = $k; Code = $p.Code }); $stats.PickActionCode++ }
+        }
+        # Embedded mimics: Where | full name (relative references resolved; "(animated)" when set by animation).
+        Add-Entry $e 'EmbeddedMimicCount' $info.Embeds.Count
+        foreach ($em in $info.Embeds) {
+            $target = Resolve-MimicRef $em.Ref $m.FullName
+            Add-Entry $e 'EmbeddedMimic' ("{0} | {1}" -f (Format-Field $em.Where), $(if ($target) { $target } else { '(animated)' }))
         }
 
         try {
             $file = Get-ExportFileName -FullName $m.FullName -Id $m.Id
-            Write-TextFile -Path (Join-Path $OutputFolder $file) -Text (New-ExportText -Comment $lang.Comment -Entries $e -Script $code)
+            Write-TextFile -Path (Join-Path $OutputFolder $file) -Text (New-ExportText -Comment $lang.Comment -Entries $e -Script $code -Sections $sections)
             [void]$written.Add($file)
             $stats.MimicFiles++
             Add-ManifestRow -Obj $m -Status 'Exported' -Message $checkNote -Extra @{
@@ -805,14 +873,14 @@ try {
 
     # ---- Manifest ----
     $manifestPath = Join-Path $OutputFolder '_ScriptExport_Manifest.csv'
-    $manifest | Export-Csv -LiteralPath $manifestPath -NoTypeInformation -Encoding UTF8
+    $manifest | ConvertTo-SafeCsvRow | Export-Csv -LiteralPath $manifestPath -NoTypeInformation -Encoding UTF8
 
     $stale = @(Get-ChildItem -LiteralPath $OutputFolder -Filter '*.txt' -File | Where-Object { -not $written.Contains($_.Name) })
 
     Write-Host ''
     Write-Host 'Done.' -ForegroundColor Green
     Write-Host ("  Mimics scanned          : {0}" -f $stats.MimicsScanned)
-    Write-Host ("  Mimic files written     : {0} ({1} with their own script)" -f $stats.MimicFiles, $stats.MimicsWithOwnScript)
+    Write-Host ("  Mimic files written     : {0} ({1} with their own script, {2} inline pick-action scripts)" -f $stats.MimicFiles, $stats.MimicsWithOwnScript, $stats.PickActionCode)
     if (-not $SkipLibraries) {
     Write-Host ("  Library files written   : {0} ({1} empty libraries skipped)" -f $stats.LibraryFiles, $stats.LibrariesEmpty) }
     if ($CheckMissingLibraries) {
