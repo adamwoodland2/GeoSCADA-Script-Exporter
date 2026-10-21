@@ -1,6 +1,10 @@
 References/
 .claude/
-CLAUDE.local.md
+# Local notes (may contain customer names or credentials), e.g. CLAUDE.local.md
+*.local.md
+
+# Local test-system tools that write to the database. The repository stays read-only on the database.
+Tools/
 
 # Generated output (exported scripts may contain sensitive information)
 ScriptExport/

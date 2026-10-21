@@ -10,6 +10,8 @@
 ' Issue numbers match GeoSCADA-Script-Analyser.ps1 (RN = 2025 R2 script runtime changes).
 ' RN01 needs an Internal Analog Point called "Test Analog" in the same group as this mimic.
 ' RN21 reads registry key "Claude Examples - Never Set", which must never be set.
+' RN24 is the exception: its Before step fails in every version (the IsNull test never worked).
+' RN25 writes and reads registry key "Claude Examples - Date" (ViewX's own registry area).
 ' Expected behaviours marked "(to confirm)" come from the release notes or a field report and have
 ' not yet been observed side by side on both versions.
 Option Explicit
@@ -26,6 +28,9 @@ Public Sub Run_Examples()
     RN06_Before : RN06_After
     RN10_Before : RN10_After
     RN21_Before : RN21_After
+    RN23_Before : RN23_After
+    RN24_Before : RN24_After
+    RN25_Before : RN25_After
     MsgBox Results, vbInformation, "Geo SCADA 2025 R2 script examples - summary"
 End Sub
 
@@ -251,4 +256,84 @@ Sub RN21_After()
     n = CLng(GetRegistry("Claude Examples - Never Set", 0))
     Report "RN21", "After", Err.Number, Err.Description, _
         "n = CLng(GetRegistry(""Claude Examples - Never Set"", 0))" & vbCrLf & "Expected: OK in all versions (n = " & n & ")."
+End Sub
+
+'----------------------------------------------------------------------------------------------
+' RN23 - Database object used as a value (Knowledge Base: Object Default Properties)
+' A database object variable no longer has a default property, so CStr(obj) no longer gives its Id.
+' Uses this mimic's own database object, so it needs no test point.
+'----------------------------------------------------------------------------------------------
+Sub RN23_Before()
+    Dim o, s
+    On Error Resume Next
+    Set o = Server.FindObject(Mimic.FullName)
+    s = CStr(o)
+    If Err.Number = 0 Then
+        If s <> CStr(o.Id) Then Err.Raise vbObjectError + 2, , "CStr(obj) gave '" & s & "', not the object Id " & o.Id
+    End If
+    Report "RN23", "Before", Err.Number, Err.Description, _
+        "s = CStr(obj)   (obj = Server.FindObject(...))" & vbCrLf & "Expected: OK before 2025 R2 (s = the object Id); error or not the Id in 2025 R2 (to confirm)."
+End Sub
+
+Sub RN23_After()
+    Dim o, s
+    On Error Resume Next
+    Set o = Server.FindObject(Mimic.FullName)
+    s = CStr(o.Id)
+    Report "RN23", "After", Err.Number, Err.Description, _
+        "s = CStr(obj.Id)" & vbCrLf & "Expected: OK in all versions (s = " & s & ")."
+End Sub
+
+'----------------------------------------------------------------------------------------------
+' RN24 - Object not found tested with IsNull (Knowledge Base: Server.LookupObject returns Nothing
+' if the object is not found, not Null). NOT a 2025 R2 change: LookupObject has always returned
+' Nothing, so the IsNull test never sees a missing object and the Before step fails in EVERY
+' version. Object Id 99999999 must not exist (as in the article).
+'----------------------------------------------------------------------------------------------
+Sub RN24_Before()
+    Dim o, s
+    On Error Resume Next
+    Set o = Server.LookupObject(99999999)
+    If IsNull(o) Then
+        s = "not found"
+    Else
+        s = CStr(o.Id)              ' reached for a missing object too: "Object required"
+    End If
+    Report "RN24", "Before", Err.Number, Err.Description, _
+        "If IsNull(obj) Then ... Else ... obj.Id" & vbCrLf & "Expected: error (Object required) in ALL versions - not an R2 change, the test never worked."
+End Sub
+
+Sub RN24_After()
+    Dim o, s
+    On Error Resume Next
+    Set o = Server.LookupObject(99999999)
+    If o Is Nothing Then
+        s = "not found"
+    Else
+        s = CStr(o.Id)
+    End If
+    Report "RN24", "After", Err.Number, Err.Description, _
+        "If obj Is Nothing Then ..." & vbCrLf & "Expected: OK in all versions (s = " & s & ")."
+End Sub
+
+'----------------------------------------------------------------------------------------------
+' RN25 - Date written to the registry without conversion (Knowledge Base: No implicit date/time to
+' number conversions or vice versa). Store the date as a Long and read it back with CDate.
+'----------------------------------------------------------------------------------------------
+Sub RN25_Before()
+    Dim t
+    On Error Resume Next
+    SetRegistry "Claude Examples - Date", Now
+    t = FormatDateTime(GetRegistry("Claude Examples - Date", 0), vbShortDate)
+    Report "RN25", "Before", Err.Number, Err.Description, _
+        "SetRegistry ""Claude Examples - Date"", Now" & vbCrLf & "Expected: OK before 2025 R2 (t = " & t & "); error in 2025 R2 (to confirm)."
+End Sub
+
+Sub RN25_After()
+    Dim t
+    On Error Resume Next
+    SetRegistry "Claude Examples - Date", CLng(Int(CDbl(Now)))
+    t = FormatDateTime(CDate(GetRegistry("Claude Examples - Date", 0)), vbShortDate)
+    Report "RN25", "After", Err.Number, Err.Description, _
+        "SetRegistry ""Claude Examples - Date"", CLng(Int(CDbl(Now)))   and   CDate(GetRegistry(...))" & vbCrLf & "Expected: OK in all versions (t = " & t & ")."
 End Sub

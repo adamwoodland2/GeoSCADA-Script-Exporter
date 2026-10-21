@@ -15,8 +15,8 @@ Logic programs are out of scope.
 | `GeoSCADA-Script-Exporter.ps1` | Connects to a Geo SCADA server through the .NET Client API and writes one `.txt` file per mimic or script library. Each file has a parseable header and then the raw script. It also writes `_ScriptExport_Manifest.csv`. Read-only against the database. |
 | `GeoSCADA-Script-Analyser.ps1` | Offline. Reads an export folder and reports what needs changing for Geo SCADA 2025 R2. Writes `_ScriptAnalysis.csv`, `_ScriptAnalysis_Actions.csv`, `_ScriptAnalysis_Instances.csv`, `_ScriptAnalysis_ExportCheck.csv` and a self-contained `_ScriptAnalysis.html`. No server connection. Exit code 3 when the export is incomplete. |
 | `Examples/RN-Examples-*.vbs / .js` | Before/after demo scripts for the version-dependent RN rules, used in the test mimics `Claude.Examples.Default` (VBScript) and `Claude.Examples.JScript`. |
-| `Tools/Build-ExampleMimics.ps1` | Test-system tool. Writes the Examples scripts into those two mimics. Dry run unless `-Write` is given. |
 | `Tests/` | Analyser regression tests. They use synthetic export files, so no server is needed. |
+| `Tools/` (git-ignored) | Local test-system tools that **write** to the database, so they are kept out of the repository. `Build-ExampleMimics.ps1` writes the Examples scripts into the two example mimics. `Set-MimicScript.ps1` replaces the script of an existing `Claude.*` mimic and keeps everything else. Both are dry runs unless `-Write` is given. |
 | `References/` (git-ignored) | Vendor documents: the 2025 R2 release notes PDF, `ClientAPI.chm` and a screenshot of a field-found script error. Not redistributable, so never commit them. |
 
 The parameters and disclaimer are modelled on https://github.com/adamwoodland2/GeoSCADA-Mimic-Walker.
@@ -34,6 +34,8 @@ Remote: https://github.com/adamwoodland2/GeoSCADA-Script-Exporter (branch `main`
 ## Rules for working here
 
 - **Never write to real database objects.** The only objects you may create or change are the test objects under `Claude.*` (`Claude.Test`, `Claude.Default`, `Claude.ArrayTest`, `Claude.Examples.*`). Never point an example at a real tag.
+- **The repository is read-only on the database.** Nothing committed may write to Geo SCADA: the exporter only reads, and the analyser and tests are offline. Anything that writes goes in the git-ignored `Tools/` folder.
+- **Customer-specific work stays local.** Scripts written for this system live in its mimics. Notes about them go in git-ignored `*.local.md` files. Keep site, object and user names out of committed files.
 - **Ask before running a full export.** It takes about 9 minutes and produces about 42,000 files; the user has stopped one before. Exporting single objects with `-Name` is fine.
 - **Exported scripts and reports are sensitive.** Keep them out of git; `ScriptExport/`, `*.txt` and `*.csv` are ignored. Put working output in the session scratchpad or `%TEMP%`, never the repo.
 - **Never commit credentials.** Test tools take `-Username` / `-Password` parameters.
@@ -56,7 +58,7 @@ Remote: https://github.com/adamwoodland2/GeoSCADA-Script-Exporter (branch `main`
 #   -MinimumSeverity, -IncludeRule / -ExcludeRule RN01,GS03, -IncludeInstances, -SkipProgIdCheck, -NoHtml, -ManifestOnly
 #   Exit code 3 = report written, but the export is incomplete (see _ScriptAnalysis_ExportCheck.csv)
 
-# Rebuild the example mimics after editing Examples\*.vbs / *.js (dry run without -Write)
+# Local only (Tools/ is git-ignored): rebuild the example mimics after editing Examples\*.vbs / *.js
 .\Tools\Build-ExampleMimics.ps1 -Username <u> -Password <p> -Write
 ```
 
@@ -129,13 +131,16 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
 - **HTML:** one template in a single-quoted here-string with a `{{JSON}}` placeholder; the data is serialised with `JavaScriptSerializer`.
   - Cast values explicitly to `[string]`, `[int]` or `[string[]]`, or the serialiser hits circular references.
   - The UI provides:
-    - a by-rule table in rule order, sortable by any column;
+    - a by-rule table listing every rule in `$Rules`, in rule order, sortable by any column. A rule with no findings shows `0`; a rule that didn't run shows `—` and the reason (`x` in the rules JSON);
     - a multi-select rule filter with All / None / RN only / GS only shortcuts, whose unticked rules are saved in `localStorage`;
     - severity, role and language filters, and search.
 
 ### Rule conventions
 
-- **RN01–RN22:** Geo SCADA 2025 R2 runtime and release-note issues. RN01–RN20 cite release-note pages; RN21 and above are field findings that are "not in the release notes".
+- **RN01–RN25:** Geo SCADA 2025 R2 runtime issues.
+  - RN01–RN20 cite release-note pages.
+  - RN21 is a field finding.
+  - RN22–RN25 cite the Knowledge Base article "Adjustments for VBScript in Geo SCADA 2025 R2" (`$KB` in the analyser; a printout is in `References/current rn info.pdf`). That article is updated over time, so re-check it for new items.
   - **RN01:** flags `.Value(x)` only when the call is the whole statement (a set). Reads such as `y = (x.Interface.Value(0))` work.
   - **RN03:** flags any bare use of a variable `Set` from `Form.Add…` in the same procedure. Exempt:
     - `.Member`
@@ -147,6 +152,12 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
   - **RN22:** an **undeclared** VBScript variable named `ToString`, `GetType`, `GetHashCode` or `Equals` is an Error. The R2 VBScript runtime is .NET-based, so these resolve to .NET members.
     - `Dim` in the same procedure is OK (tested, reported as Info).
     - A script-level `Dim`, a parameter, or a Sub/Function of that name is untested, so a Warning.
+  - **RN23:** a variable `Set` from `Server.FindObject` / `LookupObject` / `ThisObject` (optionally `.Parent`) used as a value. It shares `Get-SetVariables` and `Find-ValueUses` with RN03, so keep their exemptions in step.
+  - **RN24:** `IsNull` / `IsEmpty` / `= Null` / `IsObject` used as a not-found test on a `FindObject`/`LookupObject` result.
+    - Not an R2 change: the test never worked.
+    - Skipped when the script or a linked library defines its own `isNull` etc. Real systems do this: on the test system, one library's own `isNull` would otherwise have given 28 false hits.
+  - **RN25:** a date passed through `SetRegistry` / `GetRegistry` without `CLng(Int(CDbl(…)))` / `CDate`.
+    - `$isDate` only matches a value that starts with a date, so `"Date: " & Now` (a string) is not flagged.
 - **GS01–GS08:** best-practice and consistency checks from exporter metadata. Some will deliberately never be fixed, which is why the HTML filter remembers unticked rules.
 - **A new rule needs:**
   - an entry in `$Rules`;
@@ -162,7 +173,7 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
 ## Testing
 
 - **`Tests\Run-Tests.ps1`:** must pass before every commit. It builds fixtures in `%TEMP%\GeoSCADA-Script-Analyser-Tests` and runs four groups of checks:
-  - every `EXPECT:` / `NOT:` tag, by file line (currently 97 tags);
+  - every `EXPECT:` / `NOT:` tag, by file line (currently 132 tags);
   - template batching and the export check, with and without a manifest;
   - `-ManifestOnly`;
   - the exporter's helper functions.
@@ -188,6 +199,6 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
 
 ## Current state (October 2026)
 
-- **Uncommitted:** everything since commit `56cc3de` — exporter 1.1.0 (format 2), the analyser, `Examples/`, `Tools/`, `Tests/` and the README updates. Commit only when asked.
+- **Pushed** to `main` (history rewritten on 2026-10-15 to remove customer object names; keep examples generic, e.g. `Plant.*`, `Region.Site A.*`). Asking GitHub Support to purge the two old commit IDs is left to the user. Commit only when asked.
 - **GS03 is provisional** until there is a full export in format 2. The last full export (`full2`) is format 1, without the embedded-mimic data. Ask before running a new full export.
 - **Unconfirmed on R2:** the example mimics haven't been run in ViewX. Their "(to confirm)" expectations, and RN22's script-level `Dim` and parameter cases, are untested.

@@ -156,6 +156,73 @@ Sub B()
 End Sub
 '@
 
+# RN23-RN25 (Knowledge Base "Adjustments for VBScript in Geo SCADA 2025 R2")
+New-Fixture 'T.KB Mimic' 'CMimic' 'VBScript' @() @'
+Sub Objects(rowId)
+    Set obj = Server.LookupObject(rowId)
+    MsgBox CStr(obj)                                          ' EXPECT:RN23
+    s = "Id: " & obj                                          ' EXPECT:RN23
+    MsgBox CStr(obj.Id)                                       ' NOT:RN23
+    If obj Is Nothing Then MsgBox "Not found"                 ' NOT:RN23
+    If Not obj Is Nothing Then b = 1                          ' NOT:RN23
+    ShowObject obj                                            ' NOT:RN23
+    Set other = obj                                           ' NOT:RN23
+    If IsNull(obj) Then MsgBox "Not found"                    ' EXPECT:RN24
+    If IsNull(obj) Then b = 2                                 ' NOT:RN23
+    If obj = Null Then b = 3                                  ' EXPECT:RN24
+    If IsObject(obj) Then b = 4                               ' EXPECT:RN24
+    If IsEmpty(obj) Then b = 5                                ' EXPECT:RN24
+    Set me1 = Server.ThisObject
+    MsgBox me1                                                ' EXPECT:RN23
+    If IsNull(me1) Then b = 6                                 ' NOT:RN24
+    Set itf = Server.FindObject("A.B").Interface
+    MsgBox itf                                                ' NOT:RN23
+    Set par = Server.FindObject("A.B").Parent
+    MsgBox par                                                ' EXPECT:RN23
+End Sub
+Sub OtherProc()
+    MsgBox obj                                                ' NOT:RN23
+    If IsNull(obj) Then b = 1                                 ' NOT:RN24
+End Sub
+Sub Dates()
+    Form.Init "Dates"
+    Set StartTime = Form.AddDateTime(2, 2)
+    Form.Show
+    SetRegistry "start.date", StartTime.Value                 ' EXPECT:RN25
+    SetRegistry "start.date", CLng(Int(CDbl(StartTime.Value)))   ' NOT:RN25
+    SetRegistry "now", Now                                    ' EXPECT:RN25
+    SetRegistry("tomorrow", DateAdd("d", 1, Now))             ' EXPECT:RN25
+    App.SetRegistry "yesterday", Now - 1                      ' EXPECT:RN25
+    SetRegistry "Start Time", "TIMESTAMP '" & sql & "'"       ' NOT:RN25
+    SetRegistry "EndTime", Timer*10                           ' NOT:RN25
+    SetRegistry "text", "Date: " & Now                        ' NOT:RN25
+    t0 = Now
+    SetRegistry "t0", t0                                      ' EXPECT:RN25
+    n = 5
+    SetRegistry "n", n                                        ' NOT:RN25
+    StartTime.Value = GetRegistry("start.date", 0)            ' EXPECT:RN25
+    StartTime.Value = CDate(GetRegistry("start.date", 0))     ' NOT:RN25
+    MsgBox FormatDateTime(GetRegistry("start.date", 0))       ' EXPECT:RN25
+    MsgBox FormatDateTime(CDate(GetRegistry("start.date", 0)))   ' NOT:RN25
+    d = DateDiff("d", Now, GetRegistry("start.date", 0))      ' EXPECT:RN25
+End Sub
+Sub NoDate()
+    SetRegistry "t0", t0                                      ' NOT:RN25
+End Sub
+'@
+# A library that defines its own isNull (as some real systems do): its callers are not RN24.
+New-Fixture 'T.KB Lib' 'CScriptLibrary' 'VBScript' @('ReferencedByMimics: 1') @'
+Function isNull(o)
+    isNull = o Is Nothing
+End Function
+'@
+New-Fixture 'T.KB Own IsNull' 'CMimic' 'VBScript' @('Library: T.KB Lib') @'
+Sub Check()
+    Set o = Server.FindObject("A.B")
+    If isNull(o) Then MsgBox "Not found"                      ' NOT:RN24
+End Sub
+'@
+
 New-Fixture 'T.No Script Mimic' 'CMimic' 'None' @('PickAction: L[Layer]/Lst[List] | A | scriptCall | DisplayCustomMenu | (none)') ''
 
 New-Fixture 'T.JS Labelled VBS' 'CMimic' 'JScript' @() @'

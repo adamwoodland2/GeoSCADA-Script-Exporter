@@ -44,6 +44,9 @@
         RN20  Stop / debugger statement                                  (script debugger removed)
         RN21  GetRegistry without a default value                        (Null / empty when unset)
         RN22  Undeclared ToString / GetType / Equals / GetHashCode       (clashes with .NET member)
+        RN23  Database object variable used as a value                   (no default property now)
+        RN24  Object not found tested with IsNull / = Null / IsObject    (use Is Nothing)
+        RN25  Date stored in / read from the registry unconverted        (no implicit date <-> number)
 
       Exporter metadata (GSxx)
         GS01  Link to a script library that does not exist
@@ -69,7 +72,15 @@
     called ToString, GetType, GetHashCode or Equals (any case) as the .NET member, so assigning it
     fails with "The object has no suitable property or field named 'ToString'" (Error on each
     use). Dim in the same procedure avoids it (Info, once); a script-level declaration, parameter
-    or Sub / Function of that name is untested (Warning, once).
+    or Sub / Function of that name is untested (Warning, once). The Knowledge Base article
+    "Adjustments for VBScript in Geo SCADA 2025 R2" has since confirmed it.
+
+    RN23-RN25 come from that article. RN23 treats a variable Set from Server.FindObject /
+    LookupObject / ThisObject like RN03 treats a Form control. RN24 is not a 2025 R2 change (the
+    test never worked) but is listed in the article; it is skipped for IsNull / IsEmpty / IsObject
+    when the script or a linked library defines its own function of that name. RN25 looks for a
+    date (Now, Date, Time, DateAdd ..., a Form.AddDateTime control's .Value, or a variable set
+    from one) written with SetRegistry, and GetRegistry values used as dates without CDate.
 
     Severities: Error (fails or misbehaves in 2025 R2), Warning (likely to misbehave - check),
     Review (behaviour or layout changed - look at it), Info (advisory).
@@ -182,6 +193,7 @@ $SupportedFormat = 2      # newest exporter FormatVersion this analyser understa
 #  RULES  -  severity, title, fix and source for each rule. Edit severities here.
 # =============================================================================================
 $RN = 'Geo SCADA 2025 R2 Release Notes'
+$KB = 'Geo SCADA Knowledge Base: Adjustments for VBScript in Geo SCADA 2025 R2 (community.se.com, 2026-10-15)'
 $Rules = [ordered]@{
     RN01 = @{ Severity = 'Error';   Title = '.Value(x) used to set a value'
               Fix = 'Assign instead: x.Interface.Value = 3.14. The Value property now takes precedence over the Value method, so .Value(x) raises a script error.'; Ref = "$RN p20 '[variable].Value and Similar Methods'" }
@@ -226,7 +238,13 @@ $Rules = [ordered]@{
     RN21 = @{ Severity = 'Warning'; Title = 'GetRegistry without a default value'
               Fix = 'Pass a default, e.g. CLng(GetRegistry("Key", 0)). A key that has not been set returns Null / an empty string, which fails when converted (CLng, CInt, CDbl ...).'; Ref = '2025 R2 script runtime (field experience; not in the release notes)' }
     RN22 = @{ Severity = 'Error';   Title = 'VBScript name clashes with a .NET object member'
-              Fix = 'Rename the variable (e.g. toString -> lastSite), or at least Dim it in the procedure. The 2025 R2 VBScript runtime resolves an undeclared ToString, GetType, GetHashCode or Equals to the .NET member, so assigning it raises "The object has no suitable property or field named ''ToString''".'; Ref = '2025 R2 script runtime (field experience; not in the release notes)' }
+              Fix = 'Rename the variable (e.g. toString -> lastSite), or at least Dim it in the procedure. The 2025 R2 VBScript runtime resolves an undeclared ToString, GetType, GetHashCode or Equals to the .NET member, so assigning it raises "The object has no suitable property or field named ''ToString''".'; Ref = "$KB 'Using .Net reserved words toString, GetType, Equals and GetHashCode' (first found in the field)" }
+    RN23 = @{ Severity = 'Warning'; Title = 'Database object used as a value (default property)'
+              Fix = 'Name the property: CStr(obj.Id), MsgBox obj.FullName. A database object variable (Server.FindObject / LookupObject / ThisObject) no longer has a default property, so CStr(obj) no longer gives the object Id.'; Ref = "$KB 'Object Default Properties'" }
+    RN24 = @{ Severity = 'Warning'; Title = 'Object not found tested without Is Nothing'
+              Fix = 'Use: If obj Is Nothing Then. Server.FindObject / LookupObject return Nothing when the object is not found, so IsNull(obj), IsEmpty(obj) and obj = Null are never true and IsObject(obj) is always true. Not new in 2025 R2: the test never worked, so the not-found case fails later with "Object required".'; Ref = "$KB 'Server.LookupObject returns Nothing if the object is not found, not Null'" }
+    RN25 = @{ Severity = 'Warning'; Title = 'Date stored in or read from the registry without conversion'
+              Fix = 'Convert explicitly: SetRegistry "Key", CLng(Int(CDbl(dateValue))) to store it as a Long, and CDate(GetRegistry("Key", 0)) when reading it back. Dates and numbers are no longer converted implicitly.'; Ref = "$KB 'No implicit date/time to number conversions or vice versa'" }
     GS01 = @{ Severity = 'Error';   Title = 'Linked script library does not exist'
               Fix = 'Remove the link or point it at the library''s current location.'; Ref = 'Exporter header LibraryMissing' }
     GS02 = @{ Severity = 'Error';   Title = 'Function pick action but the mimic has no script'
@@ -723,6 +741,81 @@ function Get-VbsDeclarations([string]$Code) {
     return @{ Procs = $procs; Names = $names }
 }
 
+# VBScript object variables: one entry per variable and procedure (script level: the whole script) for each
+# match of $Pattern, whose group 1 is the variable. $Describe gets the match and returns a description of
+# what the variable holds, or $null to ignore that match. Scope is the procedure holding the Set.
+function Get-SetVariables([string]$Code, [string]$Pattern, $Procs, [scriptblock]$Describe) {
+    $vars = @{}
+    foreach ($m in [regex]::Matches($Code, $Pattern)) {
+        $what = & $Describe $m
+        if (-not $what) { continue }
+        $proc = $Procs | Where-Object { $m.Index -ge $_.Start -and $m.Index -le $_.End } | Select-Object -First 1
+        $from = if ($proc) { $proc.Start } else { 0 }; $to = if ($proc) { $proc.End } else { $Code.Length }
+        $key = "$($m.Groups[1].Value.ToLowerInvariant())|$from"
+        if (-not $vars.ContainsKey($key)) { $vars[$key] = @{ Name = $m.Groups[1].Value; What = $what; From = $from; To = $to } }
+    }
+    return @($vars.Values)
+}
+
+# Built-in functions and keywords that use the value of their argument (so an object passed to them is
+# read through its default property); passing an object to the script's own sub or function is fine.
+$script:ValueFunctions = @('MsgBox', 'CStr', 'CInt', 'CLng', 'CDbl', 'CSng', 'CBool', 'CDate', 'CByte', 'CCur', 'Len', 'Trim', 'LTrim', 'RTrim',
+    'UCase', 'LCase', 'Left', 'Right', 'Mid', 'InStr', 'InStrRev', 'IsEmpty', 'IsNull', 'IsNumeric', 'IsDate', 'Replace', 'Split', 'Val', 'Abs',
+    'Int', 'Fix', 'Round', 'FormatNumber', 'FormatDateTime', 'StrComp', 'Hex', 'Oct', 'Asc', 'Chr',
+    'If', 'ElseIf', 'While', 'Until', 'Case', 'Not', 'And', 'Or', 'Xor', 'Mod', 'Then', 'Return')
+
+# Positions in the masked VBScript $Code where object variable $Var (from Get-SetVariables) is used as a
+# value - x Mod 5, If x > 1, CStr(x), MsgBox x, y = x, x = 5 ... - rather than as the object itself:
+# x.Member, x(...), Set y = x, x Is Nothing, IsObject(x) / TypeName(x) / VarType(x), Dim x, With x, or
+# passing x to the script's own sub or function. $Exclude lists value functions not to count (another
+# rule reports them); with -SkipNullCompare, "x = Null" / "x <> Null" are not counted either.
+function Find-ValueUses([string]$Code, $Var, [string[]]$Exclude = @(), [switch]$SkipNullCompare) {
+    $fns = '^(?:' + (($script:ValueFunctions | Where-Object { $_ -notin $Exclude }) -join '|') + ')$'
+    $found = New-Object System.Collections.Generic.List[int]
+    foreach ($m in [regex]::new("(?i)(?<![\w.])$([regex]::Escape($Var.Name))(?!\w)").Matches($Code, $Var.From)) {
+        if ($m.Index -ge $Var.To) { break }
+        $i = $m.Index; $j = $i + $m.Length
+        while ($j -lt $Code.Length -and ($Code[$j] -eq ' ' -or $Code[$j] -eq "`t")) { $j++ }
+        $next = if ($j -lt $Code.Length) { $Code[$j] } else { "`n" }
+        if ($next -eq '.' -or $next -eq '(') { continue }                         # x.Value, x(...)
+        if ($j + 2 -le $Code.Length -and [string]::Compare($Code, $j, 'Is', 0, 2, $true) -eq 0 -and
+            ($j + 2 -eq $Code.Length -or -not [char]::IsLetterOrDigit($Code[$j + 2]))) { continue }   # x Is Nothing
+        if ($SkipNullCompare -and $Code.Substring($j, [Math]::Min(12, $Code.Length - $j)) -match '(?i)^(=|<>)\s*Null\b') { continue }
+        $ls = [Math]::Max($Code.LastIndexOf("`n", [Math]::Max(0, $i - 1)), $Code.LastIndexOf(':', [Math]::Max(0, $i - 1))) + 1
+        if ($ls -gt $i) { $ls = 0 }
+        $pre = $Code.Substring($ls, $i - $ls)
+        if ($pre -match '(?i)^\s*(?:Dim|ReDim|Private|Public|Const|With|Erase)\b' -or $pre -match '(?i)^\s*Set\s+(?:[\w.]+\s*=\s*)?$' -or
+            $pre -match '(?i)\bIs\s*$' -or $pre -match '(?i)\b(?:IsObject|TypeName|VarType)\s*\(\s*$') { continue }
+        if ($SkipNullCompare -and $pre -match '(?i)\bNull\s*(=|<>)\s*$') { continue }
+        # a whole argument of a call: only a problem for the built-in value functions
+        $pt = $pre.TrimEnd(); $prev = if ($pt.Length) { $pt[-1] } else { '' }
+        if (($prev -eq '(' -or $prev -eq ',') -and ($next -in ')', ',', "`r", "`n", ':')) {
+            $d = 0; $fn = $null
+            for ($k = $pt.Length - 1; $k -ge 0; $k--) {
+                if ($pt[$k] -eq ')') { $d++ } elseif ($pt[$k] -eq '(') { if ($d -eq 0) { if ($pt.Substring(0, $k) -match '(\w+)\s*$') { $fn = $Matches[1] }; break }; $d-- }
+            }
+            if (-not $fn -and $pt -match '^\s*(?:Call\s+)?(\w+)') { $fn = $Matches[1] }
+            if ($fn -and $fn -notmatch "(?i)$fns") { continue }
+        } elseif ($pt -match '^\s*(?:Call\s+)?(\w+)$' -and $Matches[1] -notmatch "(?i)$fns") { continue }   # DoThing x
+        $found.Add($i)
+    }
+    return , $found.ToArray()
+}
+
+# Database-object variables: Set x = Server.FindObject(...) / Server.LookupObject(...) / Server.ThisObject,
+# optionally followed by .Parent (still a database object). Returns 'Server.FindObject' etc., or $null.
+function Get-DbObjectSource($Code, $Match) {
+    $p = $Match.Index + $Match.Length; $call = $Match.Groups[2].Value
+    if ($call -ine 'ThisObject') {
+        while ($p -lt $Code.Length -and ($Code[$p] -eq ' ' -or $Code[$p] -eq "`t")) { $p++ }
+        if ($p -ge $Code.Length -or $Code[$p] -ne '(') { return $null }
+        $p = [GeoScadaScriptScan]::MatchParen($Code, $p); if ($p -lt 0) { return $null }; $p++
+    }
+    $rest = $Code.Substring($p, [Math]::Min(200, $Code.Length - $p))
+    if ($rest -notmatch '(?i)^(\s*\.\s*Parent\b)*[ \t]*(?:$|[\r\n:]|''|Else\b)') { return $null }   # .Interface etc. is not a database object
+    return "Server.$call"
+}
+
 # --- Body rules ----------------------------------------------------------------
 function Invoke-BodyRules($Ctx) {
     $code = $Ctx.Code; $isJs = $Ctx.IsJs; $lang = $Ctx.Language
@@ -748,48 +841,101 @@ function Invoke-BodyRules($Ctx) {
     }
 
     # RN03 Form control default property (VBScript)
+    # RN23 (database objects) works the same way: every bare use of the variable reads its default property.
+    $vbsProcs = @(); $formVars = @(); $usesRegistry = $false; $hasObjVars = $false
     if (-not $isJs) {
-        $vars = @{}
-        # Every bare use of a control variable is a default-property use (x Mod 5, If x > 1, CStr(x),
-        # MsgBox x, y = x, x = 5 ...) except the forms below, which use the object itself.
-        $sets = [regex]::Matches($code, '(?i)\bSet\s+(\w+)\s*=\s*Form\s*\.\s*Add(?!GroupBox)(\w+)')
-        if ($sets.Count) {
-            $procs = (Get-VbsDeclarations $code).Procs
-            foreach ($m in $sets) {          # one entry per variable and procedure (script level: whole script)
-                $proc = $procs | Where-Object { $m.Index -ge $_.Start -and $m.Index -le $_.End } | Select-Object -First 1
-                $from = if ($proc) { $proc.Start } else { 0 }; $to = if ($proc) { $proc.End } else { $code.Length }
-                $key = "$($m.Groups[1].Value.ToLowerInvariant())|$from"
-                if (-not $vars.ContainsKey($key)) { $vars[$key] = @{ Name = $m.Groups[1].Value; Ctrl = "Form.Add$($m.Groups[2].Value)"; From = $from; To = $to } }
+        $hasObjVars = $code -match '(?i)\bSet\s+\w+\s*=\s*(Form|Server)\s*\.'
+        $usesRegistry = $code -match '(?i)\b(?:Set|Get)Registry\b'
+        if ($hasObjVars -or $usesRegistry) { $vbsProcs = (Get-VbsDeclarations $code).Procs.ToArray() }
+        $formVars = Get-SetVariables $code '(?i)\bSet\s+(\w+)\s*=\s*Form\s*\.\s*Add(?!GroupBox)(\w+)' $vbsProcs { param($m) "Form.Add$($m.Groups[2].Value)" }
+        $seen = @{}
+        foreach ($v in $formVars) {
+            foreach ($i in (Find-ValueUses $code $v)) {
+                $ln = Get-LineOf $Ctx $i
+                if ($seen.ContainsKey($ln)) { continue }; $seen[$ln] = 1
+                Add-BodyFinding 'RN03' $Ctx $i "'$($v.Name)' ($($v.What)) used as a value; use $($v.Name).Value"
             }
-            $valueFn = '^(?:MsgBox|CStr|CInt|CLng|CDbl|CSng|CBool|CDate|CByte|CCur|Len|Trim|LTrim|RTrim|UCase|LCase|Left|Right|Mid|InStr|InStrRev|IsEmpty|IsNull|IsNumeric|IsDate|Replace|Split|Val|Abs|Int|Fix|Round|FormatNumber|FormatDateTime|StrComp|Hex|Oct|Asc|Chr|If|ElseIf|While|Until|Case|Not|And|Or|Xor|Mod|Then|Return)$'
-            $seen = @{}
-            foreach ($v in $vars.Values) {
-                foreach ($m in [regex]::new("(?i)(?<![\w.])$([regex]::Escape($v.Name))(?!\w)").Matches($code, $v.From)) {
+        }
+    }
+
+    # RN23 / RN24 database object variables (VBScript)
+    if (-not $isJs -and $hasObjVars) {
+        $dbVars =Get-SetVariables $code '(?i)\bSet\s+(\w+)\s*=\s*Server\s*\.\s*(FindObject|LookupObject|ThisObject)\b' $vbsProcs { param($m) Get-DbObjectSource $code $m }
+        # RN23: used as a value - no default property any more (IsNull / IsEmpty / = Null are RN24's)
+        $seen = @{}
+        foreach ($v in $dbVars) {
+            foreach ($i in (Find-ValueUses $code $v -Exclude 'IsNull', 'IsEmpty' -SkipNullCompare)) {
+                $ln = Get-LineOf $Ctx $i
+                if ($seen.ContainsKey($ln)) { continue }; $seen[$ln] = 1
+                Add-BodyFinding 'RN23' $Ctx $i "'$($v.Name)' ($($v.What)) used as a value; name the property, e.g. $($v.Name).Id or $($v.Name).FullName"
+            }
+        }
+        # RN24: "not found" tested with IsNull / IsEmpty / = Null / IsObject. FindObject and LookupObject return
+        # Nothing, so these tests never see it. Skipped when the script or its libraries define their own function.
+        $own = @{}
+        foreach ($fn in 'isnull', 'isempty', 'isobject') { if ($code -match "(?im)^[ \t]*(?:(?:Public|Private)\s+)?Function\s+$fn\b") { $own[$fn] = 1 } }
+        if ($Ctx.Rec.Class -eq 'CMimic') {
+            foreach ($lib in @(HL $Ctx.Rec.Header 'Library')) { $ld = Get-LibraryDefs $lib; if ($ld) { foreach ($fn in 'isnull', 'isempty', 'isobject') { if ($ld.Defs.ContainsKey($fn)) { $own[$fn] = 1 } } } }
+        }
+        foreach ($v in ($dbVars | Where-Object { $_.What -ne 'Server.ThisObject' })) {
+            $e = [regex]::Escape($v.Name)
+            foreach ($m in [regex]::new("(?i)\b(IsNull|IsEmpty|IsObject)\s*\(\s*$e\s*\)|(?<![\w.])$e\s*(=|<>)\s*Null\b|\bNull\s*(=|<>)\s*$e(?!\w)").Matches($code, $v.From)) {
+                if ($m.Index -ge $v.To) { break }
+                $fn = $m.Groups[1].Value
+                if ($fn -and $own.ContainsKey($fn.ToLowerInvariant())) { continue }
+                $test = if ($fn) { "$fn($($v.Name))" } else { "$($v.Name) = Null" }
+                $why = if ($fn -ieq 'IsObject') { 'IsObject is True for Nothing too' } else { "$($v.What) returns Nothing, not Null or Empty" }
+                Add-BodyFinding 'RN24' $Ctx $m.Index "$test used to test whether the object was found - $why. Use: If $($v.Name) Is Nothing Then"
+            }
+        }
+    }
+
+    # RN25 implicit date <-> number conversion through the registry (VBScript): SetRegistry with a date value,
+    # GetRegistry read straight into a date function or a date-time control. Dates: Now / Date / Time, the date
+    # functions, a Form.AddDateTime control's .Value, and variables assigned from those in the same procedure.
+    if (-not $isJs -and $usesRegistry) {
+        $dtVars = @($formVars | Where-Object { $_.What -eq 'Form.AddDateTime' })
+        $dateAlt = '(?:Now|Date|Time|DateAdd|DateSerial|TimeSerial|CDate|DateValue|TimeValue)\b(?!\s*\.)'
+        foreach ($v in $dtVars) { $dateAlt += '|' + [regex]::Escape($v.Name) + '\s*\.\s*Value\b' }
+        $isDate = "(?i)^\s*(?:$dateAlt)"     # the value starts with a date (Now - 1 is still a date)
+        $converted = '(?i)^\s*(?:CDbl|CLng|CInt|CSng|CCur|CStr|Int|Fix|Round|FormatDateTime|Year|Month|Day|Hour|Minute|Second|Weekday|DatePart|DateDiff|Timer)\b'
+        # variables holding a date: x = Now / x = DateAdd(...) / x = dt.Value, per procedure
+        $dateVars = @{}
+        foreach ($m in [regex]::Matches($code, '(?im)^[ \t]*(\w+)[ \t]*=[ \t]*([^\r\n:]+)')) {
+            if ($m.Groups[2].Value -match $isDate -and $m.Groups[2].Value -notmatch $converted) {
+                $proc = $vbsProcs | Where-Object { $m.Index -ge $_.Start -and $m.Index -le $_.End } | Select-Object -First 1
+                $dateVars["$($m.Groups[1].Value.ToLowerInvariant())|$(if ($proc) { $proc.Start } else { 0 })"] = 1
+            }
+        }
+        foreach ($m in [regex]::Matches($code, '(?i)(?<![\w.])(?:App[ \t]*\.[ \t]*)?SetRegistry\b[ \t]*\(?')) {
+            # the value is the second argument: from the first top-level comma to the end of the statement
+            $p = $m.Index + $m.Length; $d = 0; $comma = -1
+            for ($k = $p; $k -lt $code.Length -and $code[$k] -ne "`r" -and $code[$k] -ne "`n"; $k++) {
+                $c = $code[$k]
+                if ($c -eq '(') { $d++ } elseif ($c -eq ')') { if ($d -eq 0) { break }; $d-- } elseif ($c -eq ':' -and $d -eq 0) { break } elseif ($c -eq ',' -and $d -eq 0) { $comma = $k; break }
+            }
+            if ($comma -lt 0) { continue }
+            $q = $comma + 1; $d = 0
+            for ($k = $q; $k -lt $code.Length -and $code[$k] -ne "`r" -and $code[$k] -ne "`n"; $k++) {
+                $c = $code[$k]
+                if ($c -eq '(') { $d++ } elseif ($c -eq ')') { if ($d -eq 0) { break }; $d-- } elseif (($c -eq ':' -or $c -eq ',') -and $d -eq 0) { break }
+            }
+            $value = $code.Substring($q, $k - $q).Trim()
+            if (-not $value -or $value -match $converted) { continue }
+            $proc = $vbsProcs | Where-Object { $m.Index -ge $_.Start -and $m.Index -le $_.End } | Select-Object -First 1
+            $scope = if ($proc) { $proc.Start } else { 0 }
+            if ($value -match $isDate -or ($value -match '^(\w+)$' -and $dateVars.ContainsKey("$($Matches[1].ToLowerInvariant())|$scope"))) {
+                Add-BodyFinding 'RN25' $Ctx $m.Index "SetRegistry with a date value ($value) - store CLng(Int(CDbl($value))) and read it back with CDate"
+            }
+        }
+        foreach ($m in [regex]::Matches($code, '(?i)\b(DateAdd|DateDiff|DatePart|FormatDateTime|Year|Month|Day|Hour|Minute|Second|Weekday)\s*\(([^()]*\([^()]*\))*[^()]*?(?<![\w.])GetRegistry\b')) {
+            Add-BodyFinding 'RN25' $Ctx $m.Index "GetRegistry value passed to $($m.Groups[1].Value) - convert it with CDate(GetRegistry(...)) first"
+        }
+        if ($dtVars.Count) {
+            foreach ($v in $dtVars) {
+                foreach ($m in [regex]::new("(?i)(?<![\w.])$([regex]::Escape($v.Name))\s*\.\s*Value\s*=\s*GetRegistry\b").Matches($code, $v.From)) {
                     if ($m.Index -ge $v.To) { break }
-                    $i = $m.Index; $j = $i + $m.Length
-                    while ($j -lt $code.Length -and ($code[$j] -eq ' ' -or $code[$j] -eq "`t")) { $j++ }
-                    $next = if ($j -lt $code.Length) { $code[$j] } else { "`n" }
-                    if ($next -eq '.' -or $next -eq '(') { continue }                         # x.Value, x(...)
-                    if ($j + 2 -le $code.Length -and [string]::Compare($code, $j, 'Is', 0, 2, $true) -eq 0 -and
-                        ($j + 2 -eq $code.Length -or -not [char]::IsLetterOrDigit($code[$j + 2]))) { continue }   # x Is Nothing
-                    $ls = [Math]::Max($code.LastIndexOf("`n", [Math]::Max(0, $i - 1)), $code.LastIndexOf(':', [Math]::Max(0, $i - 1))) + 1
-                    if ($ls -gt $i) { $ls = 0 }
-                    $pre = $code.Substring($ls, $i - $ls)
-                    if ($pre -match '(?i)^\s*(?:Dim|ReDim|Private|Public|Const|With|Erase)\b' -or $pre -match '(?i)^\s*Set\s+(?:[\w.]+\s*=\s*)?$' -or
-                        $pre -match '(?i)\bIs\s*$' -or $pre -match '(?i)\b(?:IsObject|TypeName|VarType)\s*\(\s*$') { continue }
-                    # a whole argument of a call: only a problem for the built-in value functions
-                    $pt = $pre.TrimEnd(); $prev = if ($pt.Length) { $pt[-1] } else { '' }
-                    if (($prev -eq '(' -or $prev -eq ',') -and ($next -in ')', ',', "`r", "`n", ':')) {
-                        $d = 0; $fn = $null
-                        for ($k = $pt.Length - 1; $k -ge 0; $k--) {
-                            if ($pt[$k] -eq ')') { $d++ } elseif ($pt[$k] -eq '(') { if ($d -eq 0) { if ($pt.Substring(0, $k) -match '(\w+)\s*$') { $fn = $Matches[1] }; break }; $d-- }
-                        }
-                        if (-not $fn -and $pt -match '^\s*(?:Call\s+)?(\w+)') { $fn = $Matches[1] }
-                        if ($fn -and $fn -notmatch "(?i)$valueFn") { continue }
-                    } elseif ($pt -match '^\s*(?:Call\s+)?(\w+)$' -and $Matches[1] -notmatch "(?i)$valueFn") { continue }   # DoThing x
-                    $ln = Get-LineOf $Ctx $i
-                    if ($seen.ContainsKey($ln)) { continue }; $seen[$ln] = 1
-                    Add-BodyFinding 'RN03' $Ctx $i "'$($v.Name)' ($($v.Ctrl)) used as a value; use $($v.Name).Value"
+                    Add-BodyFinding 'RN25' $Ctx $m.Index "GetRegistry value written to a date-time control ($($v.Name).Value) - convert it with CDate first"
                 }
             }
         }
@@ -1358,7 +1504,14 @@ if (-not $NoHtml) {
         checkCounts = $(if ($true) { $cc = @{}; foreach ($k in $checkCounts.Keys) { $cc[[string]$k] = [int]$checkCounts[$k] }; $cc })
     }
     $rulesJson = @{}
-    foreach ($k in $Rules.Keys) { $rulesJson[$k] = @{ s = $Rules[$k].Severity; t = $Rules[$k].Title; f = $Rules[$k].Fix; r = $Rules[$k].Ref } }
+    foreach ($k in $Rules.Keys) {
+        # x: why the rule did not run (shown instead of a count, so 0 always means "checked, nothing found")
+        $x = if (-not (Test-RuleOn $k)) { 'Not run: left out by -IncludeRule / -ExcludeRule' }
+             elseif ($SkipProgIdCheck -and $k -in 'RN06', 'RN07') { 'Not run: -SkipProgIdCheck' }
+             elseif ($SeverityRank[$Rules[$k].Severity] -gt $minRank) { "Not reported: its severity is below -MinimumSeverity $MinimumSeverity" }
+             else { '' }
+        $rulesJson[$k] = @{ s = $Rules[$k].Severity; t = $Rules[$k].Title; f = $Rules[$k].Fix; r = $Rules[$k].Ref; x = $x }
+    }
     $rows = New-Object System.Collections.Generic.List[object]
     foreach ($f in $sorted) { $rows.Add([object[]]@([string]$f.Severity, [string]$f.Rule, [string]$f.FullName, [string]$f.Class, [string]$f.Language, [string]$f.ScriptLine, [string]$f.FileLine, [string]$f.Code, [string]$f.Detail, [int]$f.InstancesFixed, [string]$f.File, [string]$f.Section, [string]$f.Role)) }
     $objJson = @{}; $instJson = @{}
@@ -1402,7 +1555,7 @@ code,pre{font-family:Consolas,ui-monospace,monospace;font-size:12.5px}pre{backgr
 .pickbox{position:absolute;z-index:5;top:100%;right:0;margin-top:4px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;max-height:60vh;overflow:auto;width:440px;max-width:calc(100vw - 32px);box-shadow:0 6px 18px rgba(0,0,0,.18)}
 .pickbtns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.pickbtns button{padding:3px 8px;font-size:12px}
 .pickbox label{display:flex;gap:6px;align-items:baseline;padding:2px 0;cursor:pointer}.pickbox label b{min-width:3.2em}
-tr.rule.off{opacity:.45}
+tr.rule.off{opacity:.45}tr.rule.zero td:nth-child(n+4),tr.rule.notrun td:nth-child(n+4){color:var(--muted)}.notrunwhy{color:var(--warn);font-size:12px;font-weight:600}
 th.sort{cursor:pointer;user-select:none;white-space:nowrap}th.sort:hover{color:var(--fg)}
 th.sort::after{content:'\2195';opacity:.35;margin-left:4px}th[aria-sort=ascending]::after{content:'\25B2';opacity:1}th[aria-sort=descending]::after{content:'\25BC';opacity:1}
 </style></head><body>
@@ -1459,26 +1612,28 @@ else notes.appendChild(el('div','note','COM ProgID checks (RN06/RN07) used the r
 if(M.libCheckNotDone>0)notes.appendChild(el('div','note',M.libCheckNotDone+' mimic file(s) were exported without -CheckMissingLibraries, so links to missing libraries (GS01) are not known for them.'));
 var rb=document.querySelector('#rules tbody'),langSel=document.getElementById('lang');
 var agg={};rows.forEach(function(r){var a=agg[r[1]]||(agg[r[1]]={n:0,o:{}});a.n++;a.o[r[2]]=1;});
-// Rule filter: a multi-select of the rules that have findings, in rule order (RN01.., then GS01..).
+// Rule filter and by-rule table: every rule, in rule order (RN01.., then GS01..), so the complete picture is
+// shown - 0 means checked with nothing found; a rule that did not run shows a dash and why (R[k].x).
 // Unticked rules are remembered in this browser, so rules that will not be fixed stay hidden next time.
 function ruleCmp(a,b){var pa=a.slice(0,2),pb=b.slice(0,2);if(pa!==pb)return pa==='RN'?-1:pb==='RN'?1:pa<pb?-1:1;return a.localeCompare(b,undefined,{numeric:true});}
-var ruleIds=Object.keys(agg).sort(ruleCmp);
+var ruleIds=Object.keys(R).sort(ruleCmp);
+ruleIds.forEach(function(k){if(!agg[k])agg[k]={n:0,o:{}};});
 var ruleOn={},ruleBox={},ruleRow={},KEY='GeoSCADA-Script-Analyser.rulesOff',off=[];
 try{off=JSON.parse(localStorage.getItem(KEY)||'[]')||[];}catch(e){off=[];}
 ruleIds.forEach(function(k){ruleOn[k]=off.indexOf(k)<0;});
 function saveRules(){try{var prev=JSON.parse(localStorage.getItem(KEY)||'[]')||[];
- var now=prev.filter(function(k){return !agg[k];}).concat(ruleIds.filter(function(k){return !ruleOn[k];}));localStorage.setItem(KEY,JSON.stringify(now));}catch(e){}}
+ var now=prev.filter(function(k){return !R[k];}).concat(ruleIds.filter(function(k){return !ruleOn[k];}));localStorage.setItem(KEY,JSON.stringify(now));}catch(e){}}
 function syncRules(){var n=0;ruleIds.forEach(function(k){ruleBox[k].checked=ruleOn[k];ruleRow[k].classList.toggle('off',!ruleOn[k]);if(ruleOn[k])n++;});
  document.getElementById('rulesum').textContent=n===ruleIds.length?'All rules':n===0?'No rules':n===1?ruleIds.filter(function(k){return ruleOn[k];})[0]:n+' of '+ruleIds.length+' rules';}
 function setRules(f){ruleIds.forEach(function(k){ruleOn[k]=f(k);});syncRules();saveRules();shown=200;render();}
 // By-rule table: rule order by default (as the rule filter); click a column heading to sort by it, again to reverse.
 var stat={};
 ruleIds.forEach(function(k){
- var a=agg[k],tr=el('tr','rule'),aff=0,on=Object.keys(a.o);on.forEach(function(o){aff+=1+obj(o)[2];});
- stat[k]=[rank[R[k].s],k,R[k].t,a.n,on.length,aff];
+ var a=agg[k],x=R[k].x,tr=el('tr','rule'+(x?' notrun':a.n?'':' zero')),aff=0,on=Object.keys(a.o);on.forEach(function(o){aff+=1+obj(o)[2];});
+ stat[k]=x?[rank[R[k].s],k,R[k].t,-1,-1,-1]:[rank[R[k].s],k,R[k].t,a.n,on.length,aff];     // not run sorts below 0
  var td=el('td');td.appendChild(el('span','pill '+R[k].s,R[k].s));tr.appendChild(td);tr.appendChild(el('td',null,k));
- var tt=el('td');tt.appendChild(el('div',null,R[k].t));tt.appendChild(el('div','fix',R[k].f+' ['+R[k].r+']'));tr.appendChild(tt);
- tr.appendChild(el('td',null,String(a.n)));tr.appendChild(el('td',null,String(on.length)));tr.appendChild(el('td',null,String(aff)));
+ var tt=el('td');tt.appendChild(el('div',null,R[k].t));if(x)tt.appendChild(el('div','notrunwhy',x));tt.appendChild(el('div','fix',R[k].f+' ['+R[k].r+']'));tr.appendChild(tt);
+ [a.n,on.length,aff].forEach(function(v){tr.appendChild(el('td',null,x?'—':String(v)));});
  tr.title='Show only '+k;tr.addEventListener('click',function(){setRules(function(x){return x===k;});document.getElementById('q').scrollIntoView();});rb.appendChild(tr);ruleRow[k]=tr;});
 var ths=document.querySelectorAll('#rules thead th'),sortCol=1,sortDir=1;
 function sortRules(){
@@ -1493,7 +1648,7 @@ sortRules();
 var rl=document.getElementById('rulelist');
 ruleIds.forEach(function(k){var lb=el('label'),cb=el('input');cb.type='checkbox';
  cb.addEventListener('change',function(){ruleOn[k]=cb.checked;syncRules();saveRules();shown=200;render();});
- lb.appendChild(cb);lb.appendChild(el('b',R[k].s,k));lb.appendChild(el('span',null,R[k].t));lb.appendChild(el('span','sub','('+agg[k].n+')'));rl.appendChild(lb);ruleBox[k]=cb;});
+ lb.appendChild(cb);lb.appendChild(el('b',R[k].s,k));lb.appendChild(el('span',null,R[k].t));lb.appendChild(el('span','sub',R[k].x?'(not run)':'('+agg[k].n+')'));if(R[k].x)lb.title=R[k].x;rl.appendChild(lb);ruleBox[k]=cb;});
 document.querySelectorAll('.pickbtns button').forEach(function(b){b.addEventListener('click',function(){var p=b.getAttribute('data-p');
  setRules(function(k){return p==='all'?true:p==='none'?false:k.slice(0,2)===p;});});});
 var pick=document.getElementById('rulepick');

@@ -291,10 +291,10 @@ It writes five files:
 - `_ScriptAnalysis.csv`: one row per finding.
 - `_ScriptAnalysis_ExportCheck.csv`: problems with the export itself, such as missing, left-over or broken files. See [Export check](#export-check).
 - `_ScriptAnalysis.html`: a self-contained interactive report. It has:
-  - a summary by rule, in rule order (the same order as the rule filter). Click a column heading to sort by it, and click again to reverse;
+  - a summary of **every** rule, in rule order (the same order as the rule filter). Click a column heading to sort by it, and click again to reverse. A rule with nothing found shows `0`. A rule that did not run shows `—` and the reason: left out by `-IncludeRule` / `-ExcludeRule`, RN06/RN07 under `-SkipProgIdCheck`, or a severity below `-MinimumSeverity`. So the report always shows what was checked;
   - the objects to edit, each with its role, "fixes N instance copies", the action to take, its findings, and an expandable list of the instances it covers;
   - search and filters for severity, role, rule and language.
-  - The rule filter is a multi-select list in rule order (RN01…, then GS01…), with All / None / RN only / GS only shortcuts. Clicking a rule in the summary table shows only that rule.
+  - The rule filter is a multi-select list of every rule, in rule order (RN01…, then GS01…), with its finding count or "(not run)". It has All / None / RN only / GS only shortcuts. Clicking a rule in the summary table shows only that rule.
   - Unticked rules are remembered in that browser, so rules you have decided not to fix stay hidden in later reports. Rules that are new to a report start ticked.
   - To leave rules out of the CSV files as well, run the analyser with `-ExcludeRule`, for example `-ExcludeRule GS03,GS04`.
   - Problems found by the export check appear in a note at the top. The note is red when the export is incomplete.
@@ -387,7 +387,10 @@ Edit the rule table at the top of the script to change a rule's severity.
 | RN19 | Info | JavaScript V8 script: needs 2025 R2 clients; not supported by Original WebX. | p19, p25-26 |
 | RN20 | Info | `Stop` / `debugger` statement; the Microsoft Script Debugger has been removed. | p6, p19 |
 | RN21 | Error / Warning | `GetRegistry("Key")` with no default value: it returns Null or an empty string when the key is not set, so converting it fails. Error when the call is wrapped directly in `CLng`, `CInt`, `CDbl` and similar; Warning otherwise. The fix is to pass a default: `CLng(GetRegistry("Key", 0))`. | 2025 R2 script runtime (found in the field, not in the release notes) |
-| RN22 | Error / Warning / Info | A VBScript variable called `ToString`, `GetType`, `GetHashCode` or `Equals` (any case). Undeclared, the 2025 R2 VBScript runtime resolves it to the .NET member of that name, so `toString = x` fails with "The object has no suitable property or field named 'ToString'". All four names have been tested. An undeclared use is an Error on every line that uses it, and the fix is to rename the variable or `Dim` it. Declared with `Dim` / `ReDim` / `Const` in the same Sub or Function, it works (tested), so it is one Info on the declaration. A script-level declaration, a parameter, or a Sub / Function with that name is one Warning, because those cases are untested. Member calls such as `x.ToString` and JScript are not flagged. | 2025 R2 script runtime (found in the field, not in the release notes) |
+| RN22 | Error / Warning / Info | A VBScript variable called `ToString`, `GetType`, `GetHashCode` or `Equals` (any case). Undeclared, the 2025 R2 VBScript runtime resolves it to the .NET member of that name, so `toString = x` fails with "The object has no suitable property or field named 'ToString'". All four names have been tested. An undeclared use is an Error on every line that uses it, and the fix is to rename the variable or `Dim` it. Declared with `Dim` / `ReDim` / `Const` in the same Sub or Function, it works (tested), so it is one Info on the declaration. A script-level declaration, a parameter, or a Sub / Function with that name is one Warning, because those cases are untested. Member calls such as `x.ToString` and JScript are not flagged. | Found in the field; since confirmed by the Knowledge Base article |
+| RN23 | Warning | A VBScript variable `Set` from `Server.FindObject`, `Server.LookupObject` or `Server.ThisObject` (optionally `.Parent`) used as a value, for example `CStr(obj)`, `MsgBox obj`, `"Id: " & obj` or `obj = x`. A database object no longer has a default property, so `CStr(obj)` no longer gives its Id. The same exemptions as RN03 apply, and an object reached through `.Interface` is not tracked. | KB: Object Default Properties |
+| RN24 | Warning | A "not found" test that never works: `IsNull(obj)`, `IsEmpty(obj)`, `obj = Null` or `IsObject(obj)` on a `FindObject` / `LookupObject` result. These return `Nothing`, so use `If obj Is Nothing Then`. **Not a 2025 R2 change**: the test never worked, and the not-found case fails later with "Object required". Skipped when the script, or a library the mimic links, defines its own function of that name. | KB: Server.LookupObject returns Nothing |
+| RN25 | Warning | A date passed through the registry without conversion. Flagged: `SetRegistry` whose value is a date (`Now`, `Date`, `Time`, `DateAdd(…)` and the other date functions, a `Form.AddDateTime` control's `.Value`, or a variable set from one in the same procedure); a `GetRegistry` value passed straight to a date function (`FormatDateTime`, `DateDiff`, `Year` …); and a `GetRegistry` value written to a date-time control. The fix is `SetRegistry "Key", CLng(Int(CDbl(d)))`, then `CDate(GetRegistry("Key", 0))` to read it back. | KB: No implicit date/time to number conversions |
 | GS01 | Error | Link to a script library that does not exist. Needs the export run with `-CheckMissingLibraries`. | Exporter header |
 | GS02 | Error | Call Specific Function pick action (`scriptCall`) on a mimic that has no script. | Exporter header |
 | GS03 | Error | `scriptCall` pick action names a function not defined in the mimic script or its libraries. For an action on an embedded-mimic object, the embedded mimic's script and libraries are also checked. A single inline call (`FilterAlm 1, "x"`) is checked by its first name. | Exporter header |
@@ -399,7 +402,7 @@ Edit the rule table at the top of the script to change a rule's severity.
 
 The rule groups are:
 
-- **RN** rules: changes in the 2025 R2 script runtime. The page numbers refer to *Geo SCADA Expert 2025 R2 Release Notes* (88.9742.1); RN21 was found in the field.
+- **RN** rules: changes in the 2025 R2 script runtime. The page numbers refer to *Geo SCADA Expert 2025 R2 Release Notes* (88.9742.1). "KB" refers to the Geo SCADA Knowledge Base article [Adjustments for VBScript in Geo SCADA 2025 R2](https://community.se.com/t5/Geo-SCADA-Knowledge-Base/Adjustments-for-VBScript-in-Geo-SCADA-2025-R2/ba-p/555067). It repeats most of the release-note items and adds new ones as they are found (RN22–RN25). RN21 was found in the field.
 - **GS** rules: consistency and good-practice checks on what the export recorded.
 
 The rules are pattern-based, so treat findings as pointers to review, not as proof.
@@ -453,7 +456,7 @@ system before and after upgrading to 2025 R2:
 
 | File | Mimic language | Covers |
 | ---- | -------------- | ------ |
-| `RN-Examples-VBScript.vbs` | VBScript | RN01, RN02, RN03, RN04, RN05, RN06, RN10, RN21 |
+| `RN-Examples-VBScript.vbs` | VBScript | RN01, RN02, RN03, RN04, RN05, RN06, RN10, RN21, RN23, RN24, RN25 |
 | `RN-Examples-JScript.js` | JScript | RN11, RN12 |
 
 **Setting up the mimic.**
@@ -477,6 +480,8 @@ system before and after upgrading to 2025 R2:
 - **RN13:** depends on the Windows 11 24H2 JScript engine.
 - **RN07/RN08:** depend on the machine.
 - **GS rules:** these are broken on every version.
+
+RN24 is included even though it is not an R2 change: its Before step fails with "Object required" in **every** version, because `LookupObject` has always returned `Nothing`. It looks up object Id 99999999, which must not exist. RN25 writes the registry key `Claude Examples - Date` in ViewX's own registry area, and reads it back.
 
 Scripts saved in 2025 R2 can't be used by older clients (release notes p19). To run these
 examples on an older version, create or export the mimic in a format that version can read.
