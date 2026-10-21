@@ -47,6 +47,7 @@
         RN23  Database object variable used as a value                   (no default property now)
         RN24  Object not found tested with IsNull / = Null / IsObject    (use Is Nothing)
         RN25  Date stored in / read from the registry unconverted        (no implicit date <-> number)
+        RN26  Pick action leaves function parameters without a value     (function does not run at all)
 
       Exporter metadata (GSxx)
         GS01  Link to a script library that does not exist
@@ -82,6 +83,12 @@
     date (Now, Date, Time, DateAdd ..., a Form.AddDateTime control's .Value, or a variable set
     from one) written with SetRegistry, and GetRegistry values used as dates without CDate.
 
+    RN26 is a field finding (reported to Schneider): in 2025 R2 a Call Specific Function pick
+    action whose function has a parameter with no value in the pick action configuration does not
+    run at all, with no error; before R2 the missing parameters were passed as Empty. It compares
+    the function's parameters (found as for GS03) with the "name <= value" entries of the
+    PickAction header line. Error for VBScript (seen); Warning for JavaScript (untested).
+
     Severities: Error (fails or misbehaves in 2025 R2), Warning (likely to misbehave - check),
     Review (behaviour or layout changed - look at it), Info (advisory).
 
@@ -100,6 +107,10 @@
     The RN06/RN07 COM checks read this machine's registry (64-bit view). Run the analyser on a
     machine built like your ViewX clients, or use -SkipProgIdCheck.
 
+    Versions: the console, the HTML header and every row of the findings CSV (ExporterVersion,
+    FormatVersion, AnalyserVersion) record which exporter version and file format the export was
+    made with and which analyser version produced the report. See CHANGELOG.md.
+
     Export check: before the rules run, the folder is checked against the exporter's manifest
     (_ScriptExport_Manifest.csv) and every file that is opened is checked for a sound header. The
     problems are listed in _ScriptAnalysis_ExportCheck.csv, at the top of the HTML report and on
@@ -112,6 +123,8 @@
         ManifestMismatch  the file's header names a different object (FullName / ObjectId) from
                           the manifest row for that file
         UnsupportedFormat the file's FormatVersion is newer than this analyser knows
+        MixedExports      the files come from more than one export run (ExportedAt) or exporter
+                          version / FormatVersion; information only
         NotInManifest     the file is not in the manifest - left over from an earlier export or a
                           different scope; analysed unless -ManifestOnly
         NoManifest        there is no manifest, so completeness cannot be checked
@@ -186,7 +199,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AnalyserVersion = '1.1.0'
+$AnalyserVersion = '1.2.0'      # see CHANGELOG.md; bump with every released change
 $SupportedFormat = 2      # newest exporter FormatVersion this analyser understands
 
 # =============================================================================================
@@ -245,6 +258,8 @@ $Rules = [ordered]@{
               Fix = 'Use: If obj Is Nothing Then. Server.FindObject / LookupObject return Nothing when the object is not found, so IsNull(obj), IsEmpty(obj) and obj = Null are never true and IsObject(obj) is always true. Not new in 2025 R2: the test never worked, so the not-found case fails later with "Object required".'; Ref = "$KB 'Server.LookupObject returns Nothing if the object is not found, not Null'" }
     RN25 = @{ Severity = 'Warning'; Title = 'Date stored in or read from the registry without conversion'
               Fix = 'Convert explicitly: SetRegistry "Key", CLng(Int(CDbl(dateValue))) to store it as a Long, and CDate(GetRegistry("Key", 0)) when reading it back. Dates and numbers are no longer converted implicitly.'; Ref = "$KB 'No implicit date/time to number conversions or vice versa'" }
+    RN26 = @{ Severity = 'Error';   Title = 'Pick action leaves function parameters without a value'
+              Fix = 'Give every parameter a value in the pick action configuration (an empty string '''' or 0 if it is not used), or remove the unused parameters from the function. In 2025 R2 the function does not run at all - with no error message - when any parameter has no value; before R2 the missing ones were passed as Empty.'; Ref = '2025 R2 script runtime (found in the field, reported to Schneider 2026-10; Resource Centre update expected)' }
     GS01 = @{ Severity = 'Error';   Title = 'Linked script library does not exist'
               Fix = 'Remove the link or point it at the library''s current location.'; Ref = 'Exporter header LibraryMissing' }
     GS02 = @{ Severity = 'Error';   Title = 'Function pick action but the mimic has no script'
@@ -574,17 +589,22 @@ function Split-PickAction([string]$Value, [int]$FormatVersion) {
 
 function Test-IsJs([string]$Language) { return $Language -in @('JScript', 'JScript9', 'JavaScriptV8', 'Unknown') }
 
+function Get-ParamNames([string]$List) {
+    <# "ByVal a, b = 1, ...rest" -> a, b, rest (parameter names only). #>
+    return , ([string[]]@($List -split ',' | ForEach-Object { ($_ -replace '(?i)^\s*(ByVal|ByRef)\s+', '' -replace '=.*$', '' -replace '^\s*\.\.\.', '').Trim() } | Where-Object { $_ }))
+}
+
 function Get-FunctionDefs([string]$Code, [string]$Language) {
-    <# Function names defined in a script -> hashtable name -> parameter count. Code should have comments masked.
+    <# Function names defined in a script -> hashtable name -> parameter names. Code should have comments masked.
        JavaScript names are case-sensitive, so the table is too (VBScript names are stored lower-case). #>
     $defs = New-Object System.Collections.Hashtable ([StringComparer]::Ordinal)
     if (Test-IsJs $Language) {
-        foreach ($m in [regex]::Matches($Code, '\bfunction\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)')) { $defs[$m.Groups[1].Value] = @($m.Groups[2].Value -split ',' | Where-Object { $_.Trim() }).Count }
-        foreach ($m in [regex]::Matches($Code, '\b(?:var|let|const)?\s*([A-Za-z_$][\w$]*)\s*=\s*function\s*\(([^)]*)\)')) { $defs[$m.Groups[1].Value] = @($m.Groups[2].Value -split ',' | Where-Object { $_.Trim() }).Count }
-        foreach ($m in [regex]::Matches($Code, '\b(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>')) { $defs[$m.Groups[1].Value] = @($m.Groups[2].Value -split ',' | Where-Object { $_.Trim() }).Count }
+        foreach ($m in [regex]::Matches($Code, '\bfunction\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)')) { $defs[$m.Groups[1].Value] = Get-ParamNames $m.Groups[2].Value }
+        foreach ($m in [regex]::Matches($Code, '\b(?:var|let|const)?\s*([A-Za-z_$][\w$]*)\s*=\s*function\s*\(([^)]*)\)')) { $defs[$m.Groups[1].Value] = Get-ParamNames $m.Groups[2].Value }
+        foreach ($m in [regex]::Matches($Code, '\b(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>')) { $defs[$m.Groups[1].Value] = Get-ParamNames $m.Groups[2].Value }
     } else {
         foreach ($m in [regex]::Matches($Code, '(?im)^[ \t]*(?:(?:Public|Private)\s+)?(?:Default\s+)?(?:Sub|Function)\s+([A-Za-z_]\w*)\s*(?:\(([^)]*)\))?')) {
-            $defs[$m.Groups[1].Value.ToLowerInvariant()] = @($m.Groups[2].Value -split ',' | Where-Object { $_.Trim() }).Count
+            $defs[$m.Groups[1].Value.ToLowerInvariant()] = Get-ParamNames $m.Groups[2].Value
         }
     }
     return $defs
@@ -635,6 +655,7 @@ function Add-Finding {
         ScriptLine = $(if ($ScriptLine -gt 0) { $ScriptLine } else { '' }); FileLine = $(if ($FileLine -gt 0) { $FileLine } else { '' })
         Code = $Code; Detail = $Detail; Fix = $r.Fix; Reference = $r.Ref; Role = $Rec.Role; InstancesFixed = ([int]$Rec.Affected - 1); AffectedObjects = $Rec.Affected
         File = $Rec.File; ObjectId = $Rec.ObjectId
+        ExporterVersion = $Rec.ExporterVersion; FormatVersion = $Rec.FormatVersion; AnalyserVersion = $AnalyserVersion
     })
 }
 
@@ -1185,6 +1206,8 @@ function Get-Role($Header) {
     return 'Standalone'
 }
 $skipped = 0; $leftOut = 0
+$exportVersions = [ordered]@{}   # "exporter version|format version" -> files read
+$exportRuns = @{}                # ExportedAt -> files read (one value per export run)
 $onDisk = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
 $files = [System.IO.Directory]::EnumerateFiles($(if ($InputFolder.StartsWith('\\')) { $InputFolder } else { '\\?\' + $InputFolder }), '*.txt')
 $n = 0
@@ -1232,7 +1255,12 @@ foreach ($f in $files) {
         ScriptStartLine = [int](HV $h 'ScriptStartLine'); EditInPlace = (HV $h 'EditInPlace') -ne 'False'
         EditableSource = $(if ($listed -and $listed[2]) { $listed[2] } else { HV $h 'EditableSource' })   # the manifest keeps trailing spaces
         Affected = 1; Scan = $true; Role = (Get-Role $h)
+        ExporterVersion = $(if (HV $h 'Exporter') { (HV $h 'Exporter') -replace '^GeoSCADA-Script-Exporter\s*', '' } else { '(unknown)' })
+        FormatVersion = HV $h 'FormatVersion'
     }
+    # versions and export runs the folder was made with (files counted from the manifest are not opened)
+    $vk = "$($rec.ExporterVersion)|$($rec.FormatVersion)"; $exportVersions[$vk] = 1 + [int]$exportVersions[$vk]
+    $ek = HV $h 'ExportedAt'; if (-not $ek) { $ek = '(unknown)' }; $exportRuns[$ek] = 1 + [int]$exportRuns[$ek]
     $records.Add($rec)
     if ($rec.FullName) { $byName[$rec.FullName] = $rec }
 }
@@ -1244,6 +1272,14 @@ if ($manifestFiles) {
 }
 if (-not $records.Count) { throw "No exporter files found in '$InputFolder'." }
 if ($skipped) { Write-Warning "$skipped .txt file(s) are not exporter files and were ignored." }
+# Which exporter version(s), file format(s) and export run(s) the folder holds.
+$exportSummary = (@($exportVersions.Keys | ForEach-Object { $p = $_ -split '\|', 2; "GeoSCADA-Script-Exporter $($p[0]) (FormatVersion $($p[1])): $($exportVersions[$_]) file(s)" }) -join '; ')
+$runList = @($exportRuns.Keys | Sort-Object)
+$exportedAt = if ($runList.Count -eq 1) { $runList[0] } else { "$($runList.Count) export runs, $($runList[0]) to $($runList[-1])" }
+Write-Host "Export: $exportSummary; exported $exportedAt$(if ($preSkipped) { " (from the $($records.Count) files read; $preSkipped instance copies counted from the manifest were not opened)" })." -ForegroundColor Cyan
+if ($exportVersions.Count -gt 1 -or $runList.Count -gt 1) {
+    Add-CheckIssue 'MixedExports' '' '' "The folder holds files from $($runList.Count) export run(s) and $($exportVersions.Count) exporter version / format combination(s): $exportSummary. Runs: $($runList -join ', ')."
+}
 # Export check summary. MissingFile / ExportError / Malformed mean the report is based on an incomplete export.
 $checkCounts = [ordered]@{}
 foreach ($c in $checks) { $checkCounts[$c.Issue] = 1 + [int]$checkCounts[$c.Issue] }
@@ -1254,9 +1290,12 @@ foreach ($k in $checkCounts.Keys) {
     $what = @{ MissingFile = 'listed in the manifest but missing from the folder'; ExportError = 'could not be exported (manifest Error rows)'
                Malformed = 'have a broken header and were not analysed'; DuplicateName = 'share a FullName with another file'
                ManifestMismatch = 'do not match their manifest row'; UnsupportedFormat = 'use a newer FormatVersion'
+               MixedExports = 'files from more than one export run or exporter version'
                NotInManifest = $(if ($ManifestOnly) { 'are not in the manifest and were left out (-ManifestOnly)' } else { 'are not in the manifest (left over from an earlier export or another scope) but were analysed' })
                NoManifest = 'no manifest: completeness not checked' }[$k]
-    $msg = if ($k -eq 'NoManifest') { "Export check: $what." } else { "Export check: $($checkCounts[$k]) file(s) $what - $($first -join ', ')$more" }
+    $msg = if ($k -eq 'NoManifest') { "Export check: $what." }
+           elseif ($k -eq 'MixedExports') { "Export check: $(($checks | Where-Object Issue -eq 'MixedExports' | Select-Object -First 1).Detail)" }
+           else { "Export check: $($checkCounts[$k]) file(s) $what - $($first -join ', ')$more" }
     if ($k -in 'MissingFile', 'ExportError', 'Malformed') { Write-Warning $msg } else { Write-Host $msg -ForegroundColor Yellow }
 }
 if ($incomplete) { Write-Warning "EXPORT INCOMPLETE: this report does not cover $incomplete object(s) - see $ReportName`_ExportCheck.csv. Re-export before relying on it." }
@@ -1385,10 +1424,26 @@ foreach ($rec in $toScan) {
                     if ($md) { foreach ($t in $md.Tables) { $tables += @{ Name = $t.Name; Defs = $t.Defs; Lang = $md.Language } } }
                     else { $unverified += $embedTarget[$where] }
                 }
+                $params = $null; $paramLang = $null
                 foreach ($t in $tables) {
                     $tblJs = Test-IsJs $t.Lang          # VBScript tables hold lower-case names; JavaScript ones are case-sensitive
-                    if ($t.Defs.ContainsKey($(if ($tblJs) { $fn } else { $fn.ToLowerInvariant() }))) { $found = $true; break }
+                    $tk = if ($tblJs) { $fn } else { $fn.ToLowerInvariant() }
+                    if ($t.Defs.ContainsKey($tk)) { $found = $true; $params = @($t.Defs[$tk]); $paramLang = $t.Lang; break }
                     if ($tblJs -and -not $caseOnly) { foreach ($dn in $t.Defs.Keys) { if ($dn -ieq $fn) { $caseOnly = $dn } } }
+                }
+                # RN26: every parameter of the called function needs a value in the pick action. The exporter writes
+                # each parameter that has one as "name <= value"; a parameter left blank has no entry (or no value).
+                # Only for a plain function name - a call written with inline arguments passes them itself.
+                if ($found -and $params.Count -and $call -match '^(?:Call\s+)?[A-Za-z_$][\w$]*\s*$') {
+                    $given = @{}
+                    foreach ($gm in [regex]::Matches([string]$pa.Args, '(?:^|, )([A-Za-z_$][\w$]*) <= ')) { $given[$gm.Groups[1].Value.ToLowerInvariant()] = 1 }
+                    $missing = @($params | Where-Object { -not $given.ContainsKey($_.ToLowerInvariant()) })
+                    if ($missing.Count) {
+                        $vbs = -not (Test-IsJs $paramLang)
+                        Add-Finding -Rule 'RN26' -Rec $rec -FileLine $actLines[$a] -Code "PickAction: $($acts[$a])" `
+                            -Detail ("$where calls '$fn($($params -join ', '))' with no value for: $($missing -join ', ')" + $(if ($vbs) { '' } else { ' (seen with VBScript; untested for JavaScript)' })) `
+                            -Severity $(if ($vbs) { 'Error' } else { 'Warning' })
+                    }
                 }
                 if (-not $found) {
                     $scope = 'the mimic script' + $(if ($libs.Count) { ' or its libraries' } else { '' }) + $(if ($where -match '\[EmbeddedMimic\]$' -and $embedTarget[$where]) { " or the embedded mimic $($embedTarget[$where])" } else { '' })
@@ -1434,7 +1489,7 @@ Write-Verbose ('{0,-24} {1,7:n1}s' -f 'scripts analysed', $sw.Elapsed.TotalSecon
 # --- Output --------------------------------------------------------------------
 $sorted = @($findings | Sort-Object @{ Expression = { $SeverityRank[$_.Severity] } }, Rule, FullName, @{ Expression = { [int]("0" + $_.FileLine) } })
 $csvPath = Join-Path $OutputFolder "$ReportName.csv"
-Export-SafeCsv $csvPath $sorted @('Severity', 'Rule', 'Title', 'FullName', 'Class', 'Language', 'Section', 'ScriptLine', 'FileLine', 'Code', 'Detail', 'Fix', 'Reference', 'Role', 'InstancesFixed', 'AffectedObjects', 'File', 'ObjectId')
+Export-SafeCsv $csvPath $sorted @('Severity', 'Rule', 'Title', 'FullName', 'Class', 'Language', 'Section', 'ScriptLine', 'FileLine', 'Code', 'Detail', 'Fix', 'Reference', 'Role', 'InstancesFixed', 'AffectedObjects', 'File', 'ObjectId', 'ExporterVersion', 'FormatVersion', 'AnalyserVersion')
 $checkPath = Join-Path $OutputFolder "$($ReportName)_ExportCheck.csv"
 Export-SafeCsv $checkPath $checks.ToArray() @('Issue', 'FullName', 'File', 'Detail')
 
@@ -1494,6 +1549,7 @@ if (-not $NoHtml) {
     $htmlPath = Join-Path $OutputFolder "$ReportName.html"
     $meta = [ordered]@{
         generated = [DateTime]::Now.ToString('yyyy-MM-dd HH:mm'); analyser = $AnalyserVersion; folder = $InputFolder
+        export = [string]$exportSummary; exportedAt = [string]$exportedAt
         files = $records.Count + $preSkipped; scanned = $toScan.Count; instances = $instances; host = $env:COMPUTERNAME
         progIdCheck = (-not $SkipProgIdCheck); libCheckNotDone = $libCheckNotDone; minSeverity = $MinimumSeverity
         actionsCsv = [System.IO.Path]::GetFileName($actionsPath); instancesCsv = [System.IO.Path]::GetFileName($instancesPath)
@@ -1588,16 +1644,16 @@ var D=JSON.parse(document.getElementById('data').textContent),R=D.rules,M=D.meta
 var rank={Error:0,Warning:1,Review:2,Info:3},roleName={Template:'Template',OverriddenInstance:'Overridden instance',Instance:'Instance',Standalone:'Standalone'};
 function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e;}
 function obj(n){return O[n]||[0,'Standalone',0,'',''];}
-document.getElementById('meta').textContent='Generated '+M.generated+' by GeoSCADA-Script-Analyser '+M.analyser+' from '+M.folder+' — '+M.files+' files, '+M.scanned+' scanned, '+M.instances+' instance copies counted against their template. Minimum severity: '+M.minSeverity+'. Also written: '+M.actionsCsv+', '+M.instancesCsv+', '+M.checkCsv+'.';
+document.getElementById('meta').textContent='Generated '+M.generated+' by GeoSCADA-Script-Analyser '+M.analyser+' from '+M.folder+'. Export: '+M.export+', exported '+M.exportedAt+' — '+M.files+' files, '+M.scanned+' scanned, '+M.instances+' instance copies counted against their template. Minimum severity: '+M.minSeverity+'. Also written: '+M.actionsCsv+', '+M.instancesCsv+', '+M.checkCsv+'.';
 // Export check (the folder against the exporter's manifest): a red note when the export is incomplete.
 (function(){var C=M.checkCounts||{},keys=Object.keys(C);if(!keys.length)return;
  var what={MissingFile:'listed in the manifest but missing from the folder',ExportError:'could not be exported (manifest Error rows)',Malformed:'have a broken header and were not analysed',
   DuplicateName:'share a FullName with another file',ManifestMismatch:'do not match their manifest row',UnsupportedFormat:'use a newer FormatVersion than this analyser',
   NotInManifest:M.manifestOnly?'are not in the manifest and were left out (-ManifestOnly)':'are not in the manifest (left over from an earlier export or another scope) but were analysed',
-  NoManifest:'no manifest in the folder, so missing files cannot be detected'};
+  NoManifest:'no manifest in the folder, so missing files cannot be detected',MixedExports:'files from more than one export run or exporter version (see the list)'};
  var n=el('div','note'+(M.incomplete?' bad':''));
  n.appendChild(el('b',null,M.incomplete?'Export incomplete: this report does not cover '+M.incomplete+' object(s). Re-export before relying on it.':'Export check'));
- var ul=el('ul');keys.forEach(function(k){ul.appendChild(el('li',null,k==='NoManifest'?what[k]:C[k]+' file(s) '+(what[k]||k)));});n.appendChild(ul);
+ var ul=el('ul');keys.forEach(function(k){ul.appendChild(el('li',null,k==='NoManifest'||k==='MixedExports'?what[k]:C[k]+' file(s) '+(what[k]||k)));});n.appendChild(ul);
  if(M.checks&&M.checks.length){var d=el('details');d.appendChild(el('summary',null,'Show the files'+(M.checks.length<keys.reduce(function(s,k){return s+C[k];},0)?' (first '+M.checks.length+'; all in '+M.checkCsv+')':' (also in '+M.checkCsv+')')));
   var box=el('div','chk'),t=el('table'),tb=el('tbody');M.checks.forEach(function(c){var tr=el('tr');tr.appendChild(el('td',null,c[0]));tr.appendChild(el('td','name',c[1]));tr.appendChild(el('td','sub',c[2]));tb.appendChild(tr);});
   t.appendChild(tb);box.appendChild(t);d.appendChild(box);n.appendChild(d);}

@@ -46,6 +46,24 @@ foreach ($file in Get-ChildItem $in -Filter *.txt) {
 Write-Host "Rule tags: pass=$pass fail=$fail; rules seen: $((($f | Select-Object -ExpandProperty Rule -Unique | Sort-Object) -join ','))"
 $failed += $fail
 
+# Versions: every finding records the exporter / format / analyser version; the mixed fixture folder is flagged
+$av = ([regex]::Match([IO.File]::ReadAllText($analyser), "\`$AnalyserVersion = '([^']+)'")).Groups[1].Value
+$vok = [bool]($f | Where-Object { $_.FullName -eq 'T.VBS Mimic' -and $_.FormatVersion -eq '1' -and $_.AnalyserVersion -eq $av -and $_.ExporterVersion -eq '(unknown)' }) -and
+       -not ($f | Where-Object { $_.AnalyserVersion -ne $av })
+if ($vok) { Write-Host "PASS versions recorded on every finding (analyser $av)" } else { $failed++; Write-Host 'FAIL versions not recorded on the findings' -ForegroundColor Red }
+if (Import-Csv "$out\_ScriptAnalysis_ExportCheck.csv" | Where-Object Issue -eq 'MixedExports') { Write-Host 'PASS mixed format 1 / 2 folder reported as MixedExports' }
+else { $failed++; Write-Host 'FAIL mixed format 1 / 2 folder not reported as MixedExports' -ForegroundColor Red }
+
+# RN26 is a header finding (on the PickAction line), so it is checked per button rather than by tag
+$rn26 = @($f | Where-Object { $_.FullName -eq 'T.RN26 Mimic' -and $_.Rule -eq 'RN26' })
+foreach ($b in @(@('B1', $true, 'second parameter has no value'), @('B2', $false, 'all parameters set'), @('B3', $true, 'no arguments at all'),
+                 @('B4', $false, 'function has no parameters'), @('B5', $false, 'inline call with its own arguments'),
+                 @('B6', $true, 'library function, ByVal parameter unset'), @('B7', $true, 'parameter named without a value'),
+                 @('B8', $false, 'names differ only in case (VBScript)'))) {
+    $hit = [bool]($rn26 | Where-Object { $_.Detail -like "*$($b[0])``[Button``] calls*" })
+    if ($hit -eq $b[1]) { Write-Host "PASS RN26 $($b[0]): $($b[2])" } else { $failed++; Write-Host "FAIL RN26 $($b[0]): $($b[2]) (reported: $hit)" -ForegroundColor Red }
+}
+
 $bad = @($f | Where-Object { $_.FullName -eq 'T.TopLevel No Script' -and $_.Rule -in 'GS02', 'GS03' })
 if ($bad.Count) { $failed++; Write-Host "FAIL format-1 inline pick-action code treated as function calls: $($bad.Rule -join ',')" -ForegroundColor Red }
 else { Write-Host 'PASS format-1 inline pick-action code (scriptTopLevel/scriptCode) not treated as function calls' }

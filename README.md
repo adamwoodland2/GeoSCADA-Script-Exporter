@@ -312,6 +312,7 @@ folder against the exporter's manifest, and checks the header of every file it o
 | `DuplicateName` | Two files have the same `FullName` in their header. | Both are analysed. |
 | `ManifestMismatch` | The file's header names a different object (`FullName` / `ObjectId`) from the manifest row for that file. | Analysed. |
 | `UnsupportedFormat` | The file's `FormatVersion` is newer than the analyser knows. | Analysed; findings may be incomplete. |
+| `MixedExports` | The files come from more than one export run (`ExportedAt`) or exporter version / `FormatVersion`. | Information only. |
 | `NotInManifest` | The file is not in the manifest, for example left over from an earlier export or from a run with a different `-Group` scope. | Analysed, unless `-ManifestOnly` is given. |
 | `NoManifest` | The folder has no manifest. | Missing files and left-over files cannot be detected. |
 
@@ -391,6 +392,7 @@ Edit the rule table at the top of the script to change a rule's severity.
 | RN23 | Warning | A VBScript variable `Set` from `Server.FindObject`, `Server.LookupObject` or `Server.ThisObject` (optionally `.Parent`) used as a value, for example `CStr(obj)`, `MsgBox obj`, `"Id: " & obj` or `obj = x`. A database object no longer has a default property, so `CStr(obj)` no longer gives its Id. The same exemptions as RN03 apply, and an object reached through `.Interface` is not tracked. | KB: Object Default Properties |
 | RN24 | Warning | A "not found" test that never works: `IsNull(obj)`, `IsEmpty(obj)`, `obj = Null` or `IsObject(obj)` on a `FindObject` / `LookupObject` result. These return `Nothing`, so use `If obj Is Nothing Then`. **Not a 2025 R2 change**: the test never worked, and the not-found case fails later with "Object required". Skipped when the script, or a library the mimic links, defines its own function of that name. | KB: Server.LookupObject returns Nothing |
 | RN25 | Warning | A date passed through the registry without conversion. Flagged: `SetRegistry` whose value is a date (`Now`, `Date`, `Time`, `DateAdd(…)` and the other date functions, a `Form.AddDateTime` control's `.Value`, or a variable set from one in the same procedure); a `GetRegistry` value passed straight to a date function (`FormatDateTime`, `DateDiff`, `Year` …); and a `GetRegistry` value written to a date-time control. The fix is `SetRegistry "Key", CLng(Int(CDbl(d)))`, then `CDate(GetRegistry("Key", 0))` to read it back. | KB: No implicit date/time to number conversions |
+| RN26 | Error / Warning | A Call Specific Function pick action that gives no value to one or more of the function's parameters. In 2025 R2 the function **does not run at all**, and no error is shown. Before R2 the missing parameters were passed as `Empty`. The function's parameters, found as for GS03, are compared with the pick action's `name <= value` entries; a parameter that is missing, or listed without a value, counts as unset. The fix is to give every parameter a value (`''` or `0` if it is not used), or to remove unused parameters. Error for VBScript, where it has been seen; Warning for JavaScript, which is untested. A call written with inline arguments is not checked. | Found in the field (reported to Schneider) |
 | GS01 | Error | Link to a script library that does not exist. Needs the export run with `-CheckMissingLibraries`. | Exporter header |
 | GS02 | Error | Call Specific Function pick action (`scriptCall`) on a mimic that has no script. | Exporter header |
 | GS03 | Error | `scriptCall` pick action names a function not defined in the mimic script or its libraries. For an action on an embedded-mimic object, the embedded mimic's script and libraries are also checked. A single inline call (`FilterAlm 1, "x"`) is checked by its first name. | Exporter header |
@@ -402,7 +404,7 @@ Edit the rule table at the top of the script to change a rule's severity.
 
 The rule groups are:
 
-- **RN** rules: changes in the 2025 R2 script runtime. The page numbers refer to *Geo SCADA Expert 2025 R2 Release Notes* (88.9742.1). "KB" refers to the Geo SCADA Knowledge Base article [Adjustments for VBScript in Geo SCADA 2025 R2](https://community.se.com/t5/Geo-SCADA-Knowledge-Base/Adjustments-for-VBScript-in-Geo-SCADA-2025-R2/ba-p/555067). It repeats most of the release-note items and adds new ones as they are found (RN22–RN25). RN21 was found in the field.
+- **RN** rules: changes in the 2025 R2 script runtime. The page numbers refer to *Geo SCADA Expert 2025 R2 Release Notes* (88.9742.1). "KB" refers to the Geo SCADA Knowledge Base article [Adjustments for VBScript in Geo SCADA 2025 R2](https://community.se.com/t5/Geo-SCADA-Knowledge-Base/Adjustments-for-VBScript-in-Geo-SCADA-2025-R2/ba-p/555067). It repeats most of the release-note items and adds new ones as they are found (RN22–RN25). RN21 and RN26 were found in the field.
 - **GS** rules: consistency and good-practice checks on what the export recorded.
 
 The rules are pattern-based, so treat findings as pointers to review, not as proof.
@@ -438,7 +440,9 @@ InstancesFixed, LinkedByMimics, Findings, Errors, Warnings, Reviews, Infos, Rule
 In all the analyser's CSV files, a text cell starting with `=`, `+`, `-` or `@` begins with `'`, as in the manifest.
 
 **`_ScriptAnalysis.csv`**: `Severity, Rule, Title, FullName, Class, Language, Section, ScriptLine,
-FileLine, Code, Detail, Fix, Reference, Role, InstancesFixed, AffectedObjects, File, ObjectId`.
+FileLine, Code, Detail, Fix, Reference, Role, InstancesFixed, AffectedObjects, File, ObjectId,
+ExporterVersion, FormatVersion, AnalyserVersion`. The last three record which exporter version and file format
+the object's file came from, and which analyser version made the report.
 
 `Section` is one of:
 
@@ -480,11 +484,22 @@ system before and after upgrading to 2025 R2:
 - **RN13:** depends on the Windows 11 24H2 JScript engine.
 - **RN07/RN08:** depend on the machine.
 - **GS rules:** these are broken on every version.
+- **RN26:** this is about the pick action's configuration, not the script, so it needs a mimic set up by hand. Add `Public Sub DoNothing(One, Two)` with `MsgBox "One"` in it, and a Call Specific Function pick action to `DoNothing` that sets only `One`. Before R2 the message shows; in 2025 R2 nothing runs. Give `Two` a value and it runs in both.
 
 RN24 is included even though it is not an R2 change: its Before step fails with "Object required" in **every** version, because `LookupObject` has always returned `Nothing`. It looks up object Id 99999999, which must not exist. RN25 writes the registry key `Claude Examples - Date` in ViewX's own registry area, and reads it back.
 
 Scripts saved in 2025 R2 can't be used by older clients (release notes p19). To run these
 examples on an older version, create or export the mimic in a format that version can read.
+
+## Versions
+
+The exporter and the analyser are versioned separately, using semantic versioning (major = breaking, minor =
+new features or rules, patch = fixes). The export file layout has its own `FormatVersion`. See
+[CHANGELOG.md](CHANGELOG.md) for the history and the rules.
+
+- **Each exported file** records the exporter that wrote it and its format, e.g. `Exporter: GeoSCADA-Script-Exporter 1.1.0` and `FormatVersion: 2`, together with `ExportedAt`.
+- **The analyser** reports which exporter versions, formats and export runs it read, and its own version. These appear on the console, in the HTML report header, and in the `ExporterVersion`, `FormatVersion` and `AnalyserVersion` columns of `_ScriptAnalysis.csv`.
+- **Mixed folders:** a folder holding files from more than one export run or exporter version is listed as `MixedExports` in the export check.
 
 ## Security
 

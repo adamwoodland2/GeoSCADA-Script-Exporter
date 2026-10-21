@@ -156,6 +156,28 @@ Sub B()
 End Sub
 '@
 
+# RN26: every parameter of a pick action's function needs a value (checked in Run-Tests.ps1 by button)
+New-Fixture 'T.RN26 Mimic' 'CMimic' 'VBScript' @('Library: T.RN26 Lib',
+    "PickAction: L[Layer]/B1[Button] | A | scriptCall | TwoArgs | One <= 'hello'",
+    "PickAction: L[Layer]/B2[Button] | A | scriptCall | TwoArgs | One <= 'hello', Two <= 'goodbye'",
+    'PickAction: L[Layer]/B3[Button] | A | scriptCall | TwoArgs | (none)',
+    'PickAction: L[Layer]/B4[Button] | A | scriptCall | NoArgs | (none)',
+    'PickAction: L[Layer]/B5[Button] | A | scriptCall | TwoArgs 1, 2 | (none)',
+    'PickAction: L[Layer]/B6[Button] | A | scriptCall | LibTwo | x <= 1',
+    'PickAction: L[Layer]/B7[Button] | A | scriptCall | TwoArgs | One <= 1, Two',
+    "PickAction: L[Layer]/B8[Button] | A | scriptCall | twoargs | two <= 'b', ONE <= 'a'") @'
+Option Explicit
+Public Sub TwoArgs(One, Two)
+    MsgBox "One"
+End Sub
+Sub NoArgs()
+End Sub
+'@
+New-Fixture 'T.RN26 Lib' 'CScriptLibrary' 'VBScript' @('ReferencedByMimics: 1') @'
+Function LibTwo(x, ByVal y)
+End Function
+'@
+
 # RN23-RN25 (Knowledge Base "Adjustments for VBScript in Geo SCADA 2025 R2")
 New-Fixture 'T.KB Mimic' 'CMimic' 'VBScript' @() @'
 Sub Objects(rowId)

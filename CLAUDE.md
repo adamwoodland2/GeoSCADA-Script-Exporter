@@ -41,6 +41,10 @@ Remote: https://github.com/adamwoodland2/GeoSCADA-Script-Exporter (branch `main`
 - **Never commit credentials.** Test tools take `-Username` / `-Password` parameters.
 - **Use the dedicated Edit tool for `README.md`.** A bulk regex replace once inserted a table row after every row in the file.
 - **Commit and push only when the user asks.** Use the attribution lines from the system reminder.
+- **Version every released change.**
+  - Bump `$ExporterVersion` / `$AnalyserVersion` using semantic versioning: patch for fixes, minor for new rules / features / columns added at the end, major for breaking output or parameter changes.
+  - Bump `FormatVersion` (and the analyser's `$SupportedFormat`) only when the export file layout changes.
+  - Add an entry to `CHANGELOG.md` in the same commit.
 - **ViewX COM automation** (`Serck.ViewXApplication.OpenFromServer`) hangs against the user's running ViewX. Don't use it, and don't try to run mimic scripts yourself. The user tests in ViewX.
 
 ## Common commands
@@ -91,7 +95,7 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
   - Also recorded: `IsControlledByInstance`.
   - Example: `Region.Site A.Pumps.Pump 1.Display.Tab Status` maps to `~Templates.Pump Station.Devices.Pump.Display.Tab Status`.
 - **File format:** the header lines are comments (`'` or `//`) between `===== GEOSCADA-SCRIPT-EXPORT BEGIN/END =====` markers, followed by the raw script.
-  - Current version: `FormatVersion: 2` (`ExporterVersion` 1.1.0).
+  - Current version: `FormatVersion: 2` (`ExporterVersion` 1.1.0; analyser 1.2.0). See `CHANGELOG.md`.
   - Format 2 adds `PICKACTION <n>` code sections for inline pick-action code, `PickActionCode`, `ScriptStartLine` / `ScriptEndLine`, 7-field `PickAction` lines (`N | Where | Action | Type | Context | Function | Args`) and `EmbeddedMimic`.
   - The format is a parsing contract. If it changes, bump `FormatVersion`, update the README spec, and keep the analyser reading every older format. `Split-PickAction` handles both 1 and 2.
 - **File names:** the object's full name plus `.txt`. Invalid characters become `_`, and Windows device names (`CON`, `CON.Child`, `LPT1.x` …) get a leading `_`. Collisions get ` [Id]`. Paths of 248 characters or more use the `\\?\` prefix.
@@ -137,9 +141,9 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
 
 ### Rule conventions
 
-- **RN01–RN25:** Geo SCADA 2025 R2 runtime issues.
+- **RN01–RN26:** Geo SCADA 2025 R2 runtime issues.
   - RN01–RN20 cite release-note pages.
-  - RN21 is a field finding.
+  - RN21 and RN26 are field findings.
   - RN22–RN25 cite the Knowledge Base article "Adjustments for VBScript in Geo SCADA 2025 R2" (`$KB` in the analyser; a printout is in `References/current rn info.pdf`). That article is updated over time, so re-check it for new items.
   - **RN01:** flags `.Value(x)` only when the call is the whole statement (a set). Reads such as `y = (x.Interface.Value(0))` work.
   - **RN03:** flags any bare use of a variable `Set` from `Form.Add…` in the same procedure. Exempt:
@@ -158,6 +162,10 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
     - Skipped when the script or a linked library defines its own `isNull` etc. Real systems do this: on the test system, one library's own `isNull` would otherwise have given 28 false hits.
   - **RN25:** a date passed through `SetRegistry` / `GetRegistry` without `CLng(Int(CDbl(…)))` / `CDate`.
     - `$isDate` only matches a value that starts with a date, so `"Date: " & Now` (a string) is not flagged.
+  - **RN26:** a `scriptCall` pick action that gives no value to some of its function's parameters. In R2 the function silently doesn't run.
+    - It lives in the pick-action loop, next to GS03, and uses the parameter names now stored by `Get-FunctionDefs` (name → `string[]`).
+    - A parameter counts as given only if it appears as `name <= value` in the PickAction `Args`. In the XML, a blank parameter is either missing or an `<Arg>` with no `<Animation>`; the exporter writes the latter as a bare name.
+    - Header finding, so it's tested per button in `Run-Tests.ps1`, not by tags.
 - **GS01–GS08:** best-practice and consistency checks from exporter metadata. Some will deliberately never be fixed, which is why the HTML filter remembers unticked rules.
 - **A new rule needs:**
   - an entry in `$Rules`;
