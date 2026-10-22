@@ -199,7 +199,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AnalyserVersion = '1.2.1'      # see CHANGELOG.md; bump with every released change
+$AnalyserVersion = '1.2.2'      # see CHANGELOG.md; bump with every released change
 $SupportedFormat = 2      # newest exporter FormatVersion this analyser understands
 
 # =============================================================================================
@@ -968,9 +968,10 @@ function Invoke-BodyRules($Ctx) {
         Add-BodyFinding $rule $Ctx $m.Index "Form.$($m.Groups[1].Value)"
     }
 
-    # RN06-RN10, RN15 COM objects
+    # RN06-RN10, RN15 COM objects. Only the built-in CreateObject / ActiveXObject: a member call such as
+    # objServer.CreateObject(class, parent) is a Geo SCADA method that creates a database item, not COM.
     $literal = @{}
-    $comPattern = if ($isJs) { '\b(?:new\s+)?(ActiveXObject|CreateObject)\s*\(\s*(["''])(.*?)\2' } else { '(?i)\b(CreateObject)\s*\(\s*(")(.*?)"' }
+    $comPattern = if ($isJs) { '(?<!\.\s*)\b(?:new\s+)?(ActiveXObject|CreateObject)\s*\(\s*(["''])(.*?)\2' } else { '(?i)(?<!\.\s*)\b(CreateObject)\s*\(\s*(")(.*?)"' }
     foreach ($m in [regex]::Matches($Ctx.NoComments, $comPattern)) {
         # Strings are not masked in NoComments, so make sure the call itself is code, not text inside a string.
         $fnGroup = $m.Groups[1]
@@ -987,7 +988,7 @@ function Invoke-BodyRules($Ctx) {
             'NotRegistered' { Add-BodyFinding 'RN07' $Ctx $m.Index "'$progId' is not registered on $env:COMPUTERNAME" }
         }
     }
-    foreach ($m in [regex]::Matches($code, '\b(?:new\s+)?(ActiveXObject|CreateObject)\s*\(', $(if ($isJs) { 'None' } else { 'IgnoreCase' }))) {
+    foreach ($m in [regex]::Matches($code, '(?<!\.\s*)\b(?:new\s+)?(ActiveXObject|CreateObject)\s*\(', $(if ($isJs) { 'None' } else { 'IgnoreCase' }))) {
         if ($literal.ContainsKey($m.Index)) { continue }
         if ($isV8) { Add-BodyFinding 'RN15' $Ctx $m.Index "$($m.Groups[1].Value)(...)" } else { Add-BodyFinding 'RN08' $Ctx $m.Index "$($m.Groups[1].Value) with a computed ProgID" }
     }

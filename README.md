@@ -375,7 +375,7 @@ Edit the rule table at the top of the script to change a rule's severity.
 | RN05 | Review | `Form.AddQuery`: the row count is now exact. | p22-23 |
 | RN06 | Error | `CreateObject` / `ActiveXObject` of a COM class registered only as a 32-bit in-process server. | p16 |
 | RN07 | Warning | COM class not registered on this machine. | p16 |
-| RN08 | Review | COM object created from a computed (non-literal) ProgID. | p16 |
+| RN08 | Review | COM object created from a computed (non-literal) ProgID. RN06–RN08 only look at the built-in `CreateObject` / `ActiveXObject`. A method call on an object, such as `objServer.CreateObject(class, parent)` (a Geo SCADA method that creates a database item), is not COM and is not flagged. | p16 |
 | RN09 | Error | Clipboard through `InternetExplorer.Application` or `clipboardData`. | p23 |
 | RN10 | Error | `ScriptControl` COM object. | p23 |
 | RN11 | Error | JScript / V8 wrong-case Geo SCADA name, e.g. `LookUpObject`, `Form.init`, `.value`, `.checked`, `.sql`. | p24 |

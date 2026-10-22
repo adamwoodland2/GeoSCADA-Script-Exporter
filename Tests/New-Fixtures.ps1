@@ -54,6 +54,9 @@ Sub DoThing()
     Set bad = CreateObject("No.Such.ProgId.Anywhere")         ' EXPECT:RN07
     Set db = CreateObject("DAO.DBEngine.36")                 ' EXPECT:RN06
     Set dyn = CreateObject(progName)                          ' EXPECT:RN08
+    Set pt = objServer.CreateObject(pointClass, "Grp.Points") ' NOT:RN08
+    Set pt2 = objServer.CreateObject("CPointAlgManual", "G")  ' NOT:RN07
+    Set pt3 = Server.RootObject . CreateObject(cls, "G")      ' NOT:RN08
     ' Set y = CreateObject("No.Such.In.Comment")              NOT:RN07
     msg = "x.Interface.Value(1) inside a string"              ' NOT:RN01
     y = (x.Interface.Value(0))                                ' NOT:RN01
@@ -107,6 +110,8 @@ function ConfigureQueries(site) {
     ok.Default = true;                                       // NOT:RN12
     var sql = Mimic.Layers("Content").Item("List").sql;      // EXPECT:RN11
     var vbe = new ActiveXObject("ScriptControl");            // EXPECT:RN10
+    var pt = srv.CreateObject(cls, "Grp.Points");            // NOT:RN08
+    var dyn = new ActiveXObject(progName);                   // EXPECT:RN08
     var data = { value: 1 }; data.value = 2;                 // NOT:RN11
     _.prototype.value = function () { return 1; };           // NOT:RN11
     var arr = [3, 1]; arr.sort();                            // NOT:RN11

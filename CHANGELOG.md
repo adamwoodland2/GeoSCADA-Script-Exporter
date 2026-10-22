@@ -19,6 +19,10 @@ appear on the console, in the HTML report header, and in the `ExporterVersion`, 
 
 ## GeoSCADA-Script-Analyser
 
+### 1.2.2 (2026-10-22)
+
+- Fixed false positives in the COM checks. RN06–RN08 (and RN09, RN10, RN15) matched any `CreateObject(`, including method calls on an object such as `objServer.CreateObject(pointClass, parent)`, a Geo SCADA method that creates a database item. These were reported as RN08 (computed ProgID), and with a literal class name would have been reported as RN07 (not registered). Only the built-in `CreateObject` / `ActiveXObject` are checked now.
+
 ### 1.2.1 (2026-10-22)
 
 - The HTML report opens with a disclaimer: the report is guidance only, the checks are pattern-based, and there is no guarantee that every issue has been identified.
