@@ -95,7 +95,7 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
   - Also recorded: `IsControlledByInstance`.
   - Example: `Region.Site A.Pumps.Pump 1.Display.Tab Status` maps to `~Templates.Pump Station.Devices.Pump.Display.Tab Status`.
 - **File format:** the header lines are comments (`'` or `//`) between `===== GEOSCADA-SCRIPT-EXPORT BEGIN/END =====` markers, followed by the raw script.
-  - Current version: `FormatVersion: 2` (`ExporterVersion` 1.1.0; analyser 1.2.0). See `CHANGELOG.md`.
+  - Current version: `FormatVersion: 2` (`ExporterVersion` 1.1.0; analyser 1.2.1). See `CHANGELOG.md`.
   - Format 2 adds `PICKACTION <n>` code sections for inline pick-action code, `PickActionCode`, `ScriptStartLine` / `ScriptEndLine`, 7-field `PickAction` lines (`N | Where | Action | Type | Context | Function | Args`) and `EmbeddedMimic`.
   - The format is a parsing contract. If it changes, bump `FormatVersion`, update the README spec, and keep the analyser reading every older format. `Split-PickAction` handles both 1 and 2.
 - **File names:** the object's full name plus `.txt`. Invalid characters become `_`, and Windows device names (`CON`, `CON.Child`, `LPT1.x` …) get a leading `_`. Collisions get ` [Id]`. Paths of 248 characters or more use the `\\?\` prefix.

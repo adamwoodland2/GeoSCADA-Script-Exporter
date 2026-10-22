@@ -291,6 +291,7 @@ It writes five files:
 - `_ScriptAnalysis.csv`: one row per finding.
 - `_ScriptAnalysis_ExportCheck.csv`: problems with the export itself, such as missing, left-over or broken files. See [Export check](#export-check).
 - `_ScriptAnalysis.html`: a self-contained interactive report. It has:
+  - a disclaimer at the top: the report is guidance only, and there is no guarantee that every issue has been identified;
   - a summary of **every** rule, in rule order (the same order as the rule filter). Click a column heading to sort by it, and click again to reverse. A rule with nothing found shows `0`. A rule that did not run shows `—` and the reason: left out by `-IncludeRule` / `-ExcludeRule`, RN06/RN07 under `-SkipProgIdCheck`, or a severity below `-MinimumSeverity`. So the report always shows what was checked;
   - the objects to edit, each with its role, "fixes N instance copies", the action to take, its findings, and an expandable list of the instances it covers;
   - search and filters for severity, role, rule and language.

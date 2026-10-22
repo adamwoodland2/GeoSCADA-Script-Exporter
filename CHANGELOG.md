@@ -19,6 +19,10 @@ appear on the console, in the HTML report header, and in the `ExporterVersion`, 
 
 ## GeoSCADA-Script-Analyser
 
+### 1.2.1 (2026-10-22)
+
+- The HTML report opens with a disclaimer: the report is guidance only, the checks are pattern-based, and there is no guarantee that every issue has been identified.
+
 ### 1.2.0 (2026-10-21)
 
 - **New rules.**

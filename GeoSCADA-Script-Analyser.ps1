@@ -199,7 +199,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AnalyserVersion = '1.2.0'      # see CHANGELOG.md; bump with every released change
+$AnalyserVersion = '1.2.1'      # see CHANGELOG.md; bump with every released change
 $SupportedFormat = 2      # newest exporter FormatVersion this analyser understands
 
 # =============================================================================================
@@ -1604,6 +1604,7 @@ details.inst{padding:4px 10px 8px}details.inst ul{margin:4px 0 0;padding-left:20
 code,pre{font-family:Consolas,ui-monospace,monospace;font-size:12.5px}pre{background:var(--code);padding:6px 8px;border-radius:6px;margin:4px 0;white-space:pre-wrap;word-break:break-all}
 .fix{color:var(--muted);font-size:12px}.more{margin:10px 0}button{padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);cursor:pointer}
 .note{background:var(--card);border-left:3px solid var(--warn);padding:8px 12px;margin:10px 0;font-size:13px}
+.disclaimer{margin-top:10px;padding:8px 12px;border:1px solid var(--line);border-left:4px solid var(--rev);border-radius:6px;background:var(--bg);font-size:13px;max-width:1500px}
 .note.bad{border-left:5px solid var(--err)}.note.bad>b{color:var(--err)}.note ul{margin:4px 0 0;padding-left:20px}.note details{margin-top:6px}.note summary{cursor:pointer;color:var(--muted)}
 .chk{font-size:12px;max-height:320px;overflow:auto}.chk td{padding:3px 6px}
 .pick{position:relative}.pick>summary{list-style:none;padding:6px 26px 6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);cursor:pointer;white-space:nowrap;position:relative}
@@ -1615,7 +1616,8 @@ tr.rule.off{opacity:.45}tr.rule.zero td:nth-child(n+4),tr.rule.notrun td:nth-chi
 th.sort{cursor:pointer;user-select:none;white-space:nowrap}th.sort:hover{color:var(--fg)}
 th.sort::after{content:'\2195';opacity:.35;margin-left:4px}th[aria-sort=ascending]::after{content:'\25B2';opacity:1}th[aria-sort=descending]::after{content:'\25BC';opacity:1}
 </style></head><body>
-<header><h1>Geo SCADA Script Analysis</h1><div class="meta" id="meta"></div></header>
+<header><h1>Geo SCADA Script Analysis</h1><div class="meta" id="meta"></div>
+<div class="disclaimer" role="note"><b>Disclaimer: guidance only.</b> This report comes from pattern-based checks of the exported script text. It can include false positives, and there is no guarantee that every issue has been identified: some problems only show at run time, or depend on data, configuration or the client machine. Review each finding and test changes on a representative non-production system before applying them. The report is provided "as is", without warranty of any kind.</div></header>
 <main>
 <div id="checknote"></div>
 <div class="cards" id="cards"></div>
