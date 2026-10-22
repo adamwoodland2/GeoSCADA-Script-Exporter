@@ -8,6 +8,7 @@ Tools/
 
 # Generated output (exported scripts may contain sensitive information)
 ScriptExport/
+ScriptExport*/
 *.txt
 *.csv
 
