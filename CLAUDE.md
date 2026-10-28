@@ -95,7 +95,7 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
   - Also recorded: `IsControlledByInstance`.
   - Example: `Region.Site A.Pumps.Pump 1.Display.Tab Status` maps to `~Templates.Pump Station.Devices.Pump.Display.Tab Status`.
 - **File format:** the header lines are comments (`'` or `//`) between `===== GEOSCADA-SCRIPT-EXPORT BEGIN/END =====` markers, followed by the raw script.
-  - Current version: `FormatVersion: 2` (`ExporterVersion` 1.1.0; analyser 1.2.2). See `CHANGELOG.md`.
+  - Current version: `FormatVersion: 2` (`ExporterVersion` 1.1.0; analyser 1.3.0). See `CHANGELOG.md`.
   - Format 2 adds `PICKACTION <n>` code sections for inline pick-action code, `PickActionCode`, `ScriptStartLine` / `ScriptEndLine`, 7-field `PickAction` lines (`N | Where | Action | Type | Context | Function | Args`) and `EmbeddedMimic`.
   - The format is a parsing contract. If it changes, bump `FormatVersion`, update the README spec, and keep the analyser reading every older format. `Split-PickAction` handles both 1 and 2.
 - **File names:** the object's full name plus `.txt`. Invalid characters become `_`, and Windows device names (`CON`, `CON.Child`, `LPT1.x` …) get a leading `_`. Collisions get ` [Id]`. Paths of 248 characters or more use the `\\?\` prefix.
@@ -141,9 +141,9 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
 
 ### Rule conventions
 
-- **RN01–RN26:** Geo SCADA 2025 R2 runtime issues.
+- **RN01–RN27:** Geo SCADA 2025 R2 runtime issues.
   - RN01–RN20 cite release-note pages.
-  - RN21 and RN26 are field findings.
+  - RN21, RN26 and RN27 are field findings.
   - RN22–RN25 cite the Knowledge Base article "Adjustments for VBScript in Geo SCADA 2025 R2" (`$KB` in the analyser; a printout is in `References/current rn info.pdf`). That article is updated over time, so re-check it for new items.
   - **RN01:** flags `.Value(x)` only when the call is the whole statement (a set). Reads such as `y = (x.Interface.Value(0))` work.
   - **RN03:** flags any bare use of a variable `Set` from `Form.Add…` in the same procedure. Exempt:
@@ -166,6 +166,7 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
     - It lives in the pick-action loop, next to GS03, and uses the parameter names now stored by `Get-FunctionDefs` (name → `string[]`).
     - A parameter counts as given only if it appears as `name <= value` in the PickAction `Args`. In the XML, a blank parameter is either missing or an `<Arg>` with no `<Animation>`; the exporter writes the latter as a bare name.
     - Header finding, so it's tested per button in `Run-Tests.ps1`, not by tags.
+  - **RN27:** every `Form.AddListBox` is a Review: in R2 a list box with more items than rows scrolls horizontally. Contents are usually dynamic, so no attempt is made to count items. It's raised in the RN04 loop, so it always matches RN04's list boxes.
 - **GS01–GS08:** best-practice and consistency checks from exporter metadata. Some will deliberately never be fixed, which is why the HTML filter remembers unticked rules.
 - **A new rule needs:**
   - an entry in `$Rules`;
@@ -181,7 +182,7 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
 ## Testing
 
 - **`Tests\Run-Tests.ps1`:** must pass before every commit. It builds fixtures in `%TEMP%\GeoSCADA-Script-Analyser-Tests` and runs four groups of checks:
-  - every `EXPECT:` / `NOT:` tag, by file line (currently 132 tags);
+  - every `EXPECT:` / `NOT:` tag, by file line (currently 141 tags);
   - template batching and the export check, with and without a manifest;
   - `-ManifestOnly`;
   - the exporter's helper functions.

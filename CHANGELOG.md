@@ -19,6 +19,10 @@ appear on the console, in the HTML report header, and in the `ExporterVersion`, 
 
 ## GeoSCADA-Script-Analyser
 
+### 1.3.0 (2026-10-28)
+
+- **New rule, RN27 (Review):** every `Form.AddListBox`. In 2025 R2 a list box holding more items than its rows shows a horizontal scroll bar instead of a vertical one. List contents are usually filled at run time, so every list box is listed to check. Found in the field and reported to Schneider as a probable bug; the Knowledge Base article also notes it.
+
 ### 1.2.2 (2026-10-22)
 
 - Fixed false positives in the COM checks. RN06–RN08 (and RN09, RN10, RN15) matched any `CreateObject(`, including method calls on an object such as `objServer.CreateObject(pointClass, parent)`, a Geo SCADA method that creates a database item. These were reported as RN08 (computed ProgID), and with a literal class name would have been reported as RN07 (not registered). Only the built-in `CreateObject` / `ActiveXObject` are checked now.

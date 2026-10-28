@@ -26,7 +26,7 @@ Sub DoThing()
     Set x = Server.FindObject("Example Projects.New Float")
     x.Interface.Value(3.14)                                   ' EXPECT:RN01
     x.Interface.Value = 3.14                                  ' NOT:RN01
-    Set q = Form.AddQuery(2, 5, 50, 20, "SELECT Name FROM CMimic")  ' EXPECT:RN05
+    Set q = Form.AddQuery(2, 5, 50, 20, "SELECT Name FROM CMimic")  ' EXPECT:RN05 NOT:RN27
     v = q.Value(1, 2)                                         ' NOT:RN01
     r = Menu.AddItem("Open")                                  ' EXPECT:RN02
     Menu.AddItem "Close"                                      ' NOT:RN02
@@ -48,7 +48,8 @@ Sub DoThing()
     r = Validate(1, field)                                    ' NOT:RN03
     If IsObject(field) Then b = 1                             ' NOT:RN03
     r = CStr(field)                                           ' EXPECT:RN03
-    Set lb = Form.AddListBox(2, 5, 20, 1)                     ' EXPECT:RN04
+    Set lb = Form.AddListBox(2, 5, 20, 1)                     ' EXPECT:RN04 EXPECT:RN27
+    msg = "Form.AddListBox(1, 1, 5, 1) in a string"           ' NOT:RN27
     Set ie = CreateObject("InternetExplorer.Application")     ' EXPECT:RN09
     Set fso = CreateObject("Scripting.FileSystemObject")      ' NOT:RN07
     Set bad = CreateObject("No.Such.ProgId.Anywhere")         ' EXPECT:RN07
@@ -111,6 +112,7 @@ function ConfigureQueries(site) {
     var sql = Mimic.Layers("Content").Item("List").sql;      // EXPECT:RN11
     var vbe = new ActiveXObject("ScriptControl");            // EXPECT:RN10
     var pt = srv.CreateObject(cls, "Grp.Points");            // NOT:RN08
+    var lst = Form.AddListBox(1, 1, 5, 1);                   // EXPECT:RN27
     var dyn = new ActiveXObject(progName);                   // EXPECT:RN08
     var data = { value: 1 }; data.value = 2;                 // NOT:RN11
     _.prototype.value = function () { return 1; };           // NOT:RN11

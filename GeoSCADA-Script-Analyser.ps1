@@ -48,6 +48,7 @@
         RN24  Object not found tested with IsNull / = Null / IsObject    (use Is Nothing)
         RN25  Date stored in / read from the registry unconverted        (no implicit date <-> number)
         RN26  Pick action leaves function parameters without a value     (function does not run at all)
+        RN27  Form.AddListBox scrolling                                  (horizontal, not vertical - check)
 
       Exporter metadata (GSxx)
         GS01  Link to a script library that does not exist
@@ -88,6 +89,10 @@
     run at all, with no error; before R2 the missing parameters were passed as Empty. It compares
     the function's parameters (found as for GS03) with the "name <= value" entries of the
     PickAction header line. Error for VBScript (seen); Warning for JavaScript (untested).
+
+    RN27 (field finding, reported to Schneider; also noted in the Knowledge Base article): in 2025
+    R2 a Form.AddListBox holding more items than its rows scrolls horizontally instead of
+    vertically. List contents are usually filled at run time, so every Form.AddListBox is a Review.
 
     Severities: Error (fails or misbehaves in 2025 R2), Warning (likely to misbehave - check),
     Review (behaviour or layout changed - look at it), Info (advisory).
@@ -199,7 +204,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AnalyserVersion = '1.2.2'      # see CHANGELOG.md; bump with every released change
+$AnalyserVersion = '1.3.0'      # see CHANGELOG.md; bump with every released change
 $SupportedFormat = 2      # newest exporter FormatVersion this analyser understands
 
 # =============================================================================================
@@ -260,6 +265,8 @@ $Rules = [ordered]@{
               Fix = 'Convert explicitly: SetRegistry "Key", CLng(Int(CDbl(dateValue))) to store it as a Long, and CDate(GetRegistry("Key", 0)) when reading it back. Dates and numbers are no longer converted implicitly.'; Ref = "$KB 'No implicit date/time to number conversions or vice versa'" }
     RN26 = @{ Severity = 'Error';   Title = 'Pick action leaves function parameters without a value'
               Fix = 'Give every parameter a value in the pick action configuration (an empty string '''' or 0 if it is not used), or remove the unused parameters from the function. In 2025 R2 the function does not run at all - with no error message - when any parameter has no value; before R2 the missing ones were passed as Empty.'; Ref = '2025 R2 script runtime (found in the field, reported to Schneider 2026-10; Resource Centre update expected)' }
+    RN27 = @{ Severity = 'Review';  Title = 'List box scrolls horizontally when it has more items than rows'
+              Fix = 'Check how each list box scrolls when it holds more items than its rows: in 2025 R2 it shows a horizontal scroll bar instead of the vertical one shown before. The content is usually dynamic, so every Form.AddListBox is listed. If the horizontal scrolling is a problem, make the list tall enough for its items (the rows argument or ListBox.Rows), or limit what it holds. Reported to Schneider as a probable bug, so check again after updates.'; Ref = "$KB 'Behavior Changes to Form.AddListBox' (note on horizontal scrolling); found in the field and reported to Schneider 2026-10" }
     GS01 = @{ Severity = 'Error';   Title = 'Linked script library does not exist'
               Fix = 'Remove the link or point it at the library''s current location.'; Ref = 'Exporter header LibraryMissing' }
     GS02 = @{ Severity = 'Error';   Title = 'Function pick action but the mimic has no script'
@@ -962,10 +969,12 @@ function Invoke-BodyRules($Ctx) {
         }
     }
 
-    # RN04 / RN05 list and query row counts
+    # RN04 / RN05 list and query row counts; RN27 list box scrolling (every list box: its content is
+    # usually filled at run time, so whether it holds more items than rows cannot be told from the script)
     foreach ($m in [regex]::Matches($code, '\bForm\s*\.\s*(AddListBox|AddQuery)\b', $opt)) {
         $rule = if ($m.Groups[1].Value -ieq 'AddListBox') { 'RN04' } else { 'RN05' }
         Add-BodyFinding $rule $Ctx $m.Index "Form.$($m.Groups[1].Value)"
+        if ($rule -eq 'RN04') { Add-BodyFinding 'RN27' $Ctx $m.Index 'Form.AddListBox - check scrolling when it holds more items than rows' }
     }
 
     # RN06-RN10, RN15 COM objects. Only the built-in CreateObject / ActiveXObject: a member call such as
