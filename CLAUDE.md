@@ -95,7 +95,7 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
   - Also recorded: `IsControlledByInstance`.
   - Example: `Region.Site A.Pumps.Pump 1.Display.Tab Status` maps to `~Templates.Pump Station.Devices.Pump.Display.Tab Status`.
 - **File format:** the header lines are comments (`'` or `//`) between `===== GEOSCADA-SCRIPT-EXPORT BEGIN/END =====` markers, followed by the raw script.
-  - Current version: `FormatVersion: 2` (`ExporterVersion` 1.1.0; analyser 1.3.0). See `CHANGELOG.md`.
+  - Current version: `FormatVersion: 2` (`ExporterVersion` 1.1.0; analyser 1.3.1). See `CHANGELOG.md`.
   - Format 2 adds `PICKACTION <n>` code sections for inline pick-action code, `PickActionCode`, `ScriptStartLine` / `ScriptEndLine`, 7-field `PickAction` lines (`N | Where | Action | Type | Context | Function | Args`) and `EmbeddedMimic`.
   - The format is a parsing contract. If it changes, bump `FormatVersion`, update the README spec, and keep the analyser reading every older format. `Split-PickAction` handles both 1 and 2.
 - **File names:** the object's full name plus `.txt`. Invalid characters become `_`, and Windows device names (`CON`, `CON.Child`, `LPT1.x` …) get a leading `_`. Collisions get ` [Id]`. Paths of 248 characters or more use the `\\?\` prefix.
@@ -167,6 +167,7 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
     - A parameter counts as given only if it appears as `name <= value` in the PickAction `Args`. In the XML, a blank parameter is either missing or an `<Arg>` with no `<Animation>`; the exporter writes the latter as a bare name.
     - Header finding, so it's tested per button in `Run-Tests.ps1`, not by tags.
   - **RN27:** every `Form.AddListBox` is a Review: in R2 a list box with more items than rows scrolls horizontally. Contents are usually dynamic, so no attempt is made to count items. It's raised in the RN04 loop, so it always matches RN04's list boxes.
+    - Treated as an expected R2 change, so the wording is neutral (no "bug" note) and it has no reference. The HTML omits the `[…]` for an empty `Ref`.
 - **GS01–GS08:** best-practice and consistency checks from exporter metadata. Some will deliberately never be fixed, which is why the HTML filter remembers unticked rules.
 - **A new rule needs:**
   - an entry in `$Rules`;

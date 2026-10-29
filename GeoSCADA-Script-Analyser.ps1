@@ -90,9 +90,9 @@
     the function's parameters (found as for GS03) with the "name <= value" entries of the
     PickAction header line. Error for VBScript (seen); Warning for JavaScript (untested).
 
-    RN27 (field finding, reported to Schneider; also noted in the Knowledge Base article): in 2025
-    R2 a Form.AddListBox holding more items than its rows scrolls horizontally instead of
-    vertically. List contents are usually filled at run time, so every Form.AddListBox is a Review.
+    RN27: in 2025 R2 a Form.AddListBox holding more items than its rows scrolls horizontally
+    instead of vertically. List contents are usually filled at run time, so every
+    Form.AddListBox is a Review.
 
     Severities: Error (fails or misbehaves in 2025 R2), Warning (likely to misbehave - check),
     Review (behaviour or layout changed - look at it), Info (advisory).
@@ -204,7 +204,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AnalyserVersion = '1.3.0'      # see CHANGELOG.md; bump with every released change
+$AnalyserVersion = '1.3.1'      # see CHANGELOG.md; bump with every released change
 $SupportedFormat = 2      # newest exporter FormatVersion this analyser understands
 
 # =============================================================================================
@@ -266,7 +266,7 @@ $Rules = [ordered]@{
     RN26 = @{ Severity = 'Error';   Title = 'Pick action leaves function parameters without a value'
               Fix = 'Give every parameter a value in the pick action configuration (an empty string '''' or 0 if it is not used), or remove the unused parameters from the function. In 2025 R2 the function does not run at all - with no error message - when any parameter has no value; before R2 the missing ones were passed as Empty.'; Ref = '2025 R2 script runtime (found in the field, reported to Schneider 2026-10; Resource Centre update expected)' }
     RN27 = @{ Severity = 'Review';  Title = 'List box scrolls horizontally when it has more items than rows'
-              Fix = 'Check how each list box scrolls when it holds more items than its rows: in 2025 R2 it shows a horizontal scroll bar instead of the vertical one shown before. The content is usually dynamic, so every Form.AddListBox is listed. If the horizontal scrolling is a problem, make the list tall enough for its items (the rows argument or ListBox.Rows), or limit what it holds. Reported to Schneider as a probable bug, so check again after updates.'; Ref = "$KB 'Behavior Changes to Form.AddListBox' (note on horizontal scrolling); found in the field and reported to Schneider 2026-10" }
+              Fix = 'Check how each list box scrolls when it holds more items than its rows: in 2025 R2 it shows a horizontal scroll bar instead of the vertical one shown before. The content is usually dynamic, so every Form.AddListBox is listed. If the horizontal scrolling is a problem, make the list tall enough for its items (the rows argument or ListBox.Rows), or limit what it holds.'; Ref = '' }
     GS01 = @{ Severity = 'Error';   Title = 'Linked script library does not exist'
               Fix = 'Remove the link or point it at the library''s current location.'; Ref = 'Exporter header LibraryMissing' }
     GS02 = @{ Severity = 'Error';   Title = 'Function pick action but the mimic has no script'
@@ -1627,7 +1627,7 @@ th.sort{cursor:pointer;user-select:none;white-space:nowrap}th.sort:hover{color:v
 th.sort::after{content:'\2195';opacity:.35;margin-left:4px}th[aria-sort=ascending]::after{content:'\25B2';opacity:1}th[aria-sort=descending]::after{content:'\25BC';opacity:1}
 </style></head><body>
 <header><h1>Geo SCADA Script Analysis</h1><div class="meta" id="meta"></div>
-<div class="disclaimer" role="note"><b>Disclaimer: guidance only.</b> This report comes from pattern-based checks of the exported script text. It can include false positives, and there is no guarantee that every issue has been identified: some problems only show at run time, or depend on data, configuration or the client machine. Review each finding and test changes on a representative non-production system before applying them. The report is provided "as is", without warranty of any kind.</div></header>
+<div class="disclaimer" role="note"><b>Disclaimer: guidance only.</b> This report comes from pattern-based checks of the exported script text. It can include false positives, and there is no guarantee that every issue has been identified: some problems only show at run time, or depend on data, configuration or the client machine. Some of the suggested changes may not work in earlier versions of Geo SCADA, or may change how scripts look or behave. Review each finding, and test every change on a representative non-production system with each Geo SCADA client version in use before applying it. The report is provided "as is", without warranty of any kind.</div></header>
 <main>
 <div id="checknote"></div>
 <div class="cards" id="cards"></div>
@@ -1700,7 +1700,7 @@ ruleIds.forEach(function(k){
  var a=agg[k],x=R[k].x,tr=el('tr','rule'+(x?' notrun':a.n?'':' zero')),aff=0,on=Object.keys(a.o);on.forEach(function(o){aff+=1+obj(o)[2];});
  stat[k]=x?[rank[R[k].s],k,R[k].t,-1,-1,-1]:[rank[R[k].s],k,R[k].t,a.n,on.length,aff];     // not run sorts below 0
  var td=el('td');td.appendChild(el('span','pill '+R[k].s,R[k].s));tr.appendChild(td);tr.appendChild(el('td',null,k));
- var tt=el('td');tt.appendChild(el('div',null,R[k].t));if(x)tt.appendChild(el('div','notrunwhy',x));tt.appendChild(el('div','fix',R[k].f+' ['+R[k].r+']'));tr.appendChild(tt);
+ var tt=el('td');tt.appendChild(el('div',null,R[k].t));if(x)tt.appendChild(el('div','notrunwhy',x));tt.appendChild(el('div','fix',R[k].f+(R[k].r?' ['+R[k].r+']':'')));tr.appendChild(tt);
  [a.n,on.length,aff].forEach(function(v){tr.appendChild(el('td',null,x?'—':String(v)));});
  tr.title='Show only '+k;tr.addEventListener('click',function(){setRules(function(x){return x===k;});document.getElementById('q').scrollIntoView();});rb.appendChild(tr);ruleRow[k]=tr;});
 var ths=document.querySelectorAll('#rules thead th'),sortCol=1,sortDir=1;

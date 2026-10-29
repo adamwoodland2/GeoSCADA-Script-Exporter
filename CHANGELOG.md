@@ -19,6 +19,11 @@ appear on the console, in the HTML report header, and in the `ExporterVersion`, 
 
 ## GeoSCADA-Script-Analyser
 
+### 1.3.1 (2026-10-29)
+
+- RN27 is worded as an expected 2025 R2 change: the "probable bug" note and its reference were removed. The HTML report no longer shows empty brackets for a rule without a reference.
+- The HTML disclaimer now also says that some suggested changes may not work in earlier versions of Geo SCADA, or may change how scripts look or behave, and that every change should be tested with each Geo SCADA client version in use.
+
 ### 1.3.0 (2026-10-28)
 
 - **New rule, RN27 (Review):** every `Form.AddListBox`. In 2025 R2 a list box holding more items than its rows shows a horizontal scroll bar instead of a vertical one. List contents are usually filled at run time, so every list box is listed to check. Found in the field and reported to Schneider as a probable bug; the Knowledge Base article also notes it.
