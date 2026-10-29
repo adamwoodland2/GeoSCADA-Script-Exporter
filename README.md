@@ -462,21 +462,27 @@ system before and after upgrading to 2025 R2:
 
 | File | Mimic language | Covers |
 | ---- | -------------- | ------ |
-| `RN-Examples-VBScript.vbs` | VBScript | RN01, RN02, RN03, RN04, RN05, RN06, RN10, RN21, RN23, RN24, RN25 |
+| `RN-Examples-VBScript.vbs` | VBScript | RN01, RN02, RN03, RN04, RN05, RN06, RN10, RN21, RN23, RN24, RN25, RN26 (its own buttons), RN27 |
 | `RN-Examples-JScript.js` | JScript | RN11, RN12 |
 
 **Setting up the mimic.**
 
 1. Paste the script into a mimic of the matching language.
 2. Add a pick action of type **Call Specific Function** → `Run_Examples`.
-3. For RN01, create an Internal Analog Point called `Test Analog` in the same group as the mimic. The example writes `Interface.Value` to it, so never point it at a real tag. A third RN01 step, Read, checks that `y = (x.Interface.Value(0))` still works.
+3. For RN01, create an Internal Analog Point called `Test Analog` in the same group as the mimic. The example writes `Interface.Value` to it, so never point it at a real tag. A third RN01 step, Read, checks that `y = (x.Interface.Value(0))` still works. The script looks for the point first and never creates it. If the point isn't there, it asks whether to carry on without RN01 (**OK**) or stop (**Cancel**), so you can create the point and run the examples again.
+4. For RN26 (VBScript), add two more buttons with a **Call Specific Function** pick action → `RN26_PickAction`. RN26 is about how a pick action passes arguments, so it isn't part of `Run_Examples`.
+   - **RN26 Before:** set `One` to `'hello'` and leave `Two` blank.
+   - **RN26 After:** set `One` to `'hello'` and `Two` to `'goodbye'`.
+
+   Before 2025 R2, both buttons show a message; the Before button shows `Two` as Empty. In 2025 R2 the Before button does nothing at all, with no error, while the After button works.
 
 **What happens when it runs.**
 
 - Each issue runs its **Before** code (as typically written for 2025 and earlier), then its **After** code, which works in every version.
 - Each step reports OK or the error it raised, and one failing step does not stop the run. A summary is shown at the end.
 - On 2025 and earlier, both steps should report OK.
-- On 2025 R2, each Before step is expected to fail, or for RN04/RN05 to look wrong, while each After step works.
+- On 2025 R2, each Before step is expected to fail, or for RN04, RN05 and RN27 to look wrong, while each After step works.
+- RN27 is a visual check: the Before list holds 11 items in 3 rows and scrolls horizontally in 2025 R2 (vertically before); the After list is tall enough for its items.
 - Expectations marked *(to confirm)* come from the release notes or a field report and have not yet been checked side by side on both versions.
 
 **Issues left out.** These can't show "works before, fails after":
@@ -486,10 +492,10 @@ system before and after upgrading to 2025 R2:
 - **RN13:** depends on the Windows 11 24H2 JScript engine.
 - **RN07/RN08:** depend on the machine.
 - **GS rules:** these are broken on every version.
-- **RN26:** this is about the pick action's configuration, not the script, so it needs a mimic set up by hand. Add `Public Sub DoNothing(One, Two)` with `MsgBox "One"` in it, and a Call Specific Function pick action to `DoNothing` that sets only `One`. Before R2 the message shows; in 2025 R2 nothing runs. Give `Two` a value and it runs in both.
-- **RN27:** there is no code fix to demonstrate. To see it, use the RN04 step: its list asks for 20 rows and holds 30 items. Before R2 it scrolls vertically; in 2025 R2 it scrolls horizontally.
 
-RN24 is included even though it is not an R2 change: its Before step fails with "Object required" in **every** version, because `LookupObject` has always returned `Nothing`. It looks up object Id 99999999, which must not exist. RN25 writes the registry key `Claude Examples - Date` in ViewX's own registry area, and reads it back.
+**Database objects used.** Apart from RN01's test point, the examples only use objects that always exist: the mimic running the script (`Server.ThisObject`) and the root group (Id 0). RN05's query lists the first 30 groups. The examples write nothing to the database except RN01's test point.
+
+RN24 is included even though it is not an R2 change: its Before step fails with "Object required" in **every** version, because `FindObject` and `LookupObject` have always returned `Nothing`. It looks for a child of the mimic, which can never exist because a mimic can't contain other objects. RN25 writes the registry key `Claude Examples - Date` in ViewX's own registry area, and reads it back.
 
 Scripts saved in 2025 R2 can't be used by older clients (release notes p19). To run these
 examples on an older version, create or export the mimic in a format that version can read.

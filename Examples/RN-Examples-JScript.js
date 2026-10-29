@@ -8,6 +8,7 @@
 // MsgBox); an error in one step does not stop the run. A summary is shown at the end.
 //
 // Issue numbers match GeoSCADA-Script-Analyser.ps1 (RN = 2025 R2 script runtime changes).
+// The only database object used is the root group (Id 0), which always exists. Nothing is written.
 
 var Results = "";
 
@@ -44,8 +45,7 @@ function RN11_Before() {
         Form.init("RN11");                                     // should be Form.Init
         var box = Form.AddEditBox(1, 1, 20, 1);
         box.value = "test";                                    // should be .Value
-        var id = Server.FindObject(Mimic.FullName).Id;
-        var o = Server.LookUpObject(id);                       // should be LookupObject
+        var o = Server.LookUpObject(0);                        // should be LookupObject (0 = root group)
         Report("RN11", "Before", null,
             "Form.init / box.value / Server.LookUpObject\nExpected: OK before 2025 R2; error in 2025 R2.");
     } catch (e) {
@@ -59,8 +59,7 @@ function RN11_After() {
         Form.Init("RN11");
         var box = Form.AddEditBox(1, 1, 20, 1);
         box.Value = "test";
-        var id = Server.FindObject(Mimic.FullName).Id;
-        var o = Server.LookupObject(id);
+        var o = Server.LookupObject(0);                        // 0 = root group
         Report("RN11", "After", null, "Form.Init / box.Value / Server.LookupObject\nExpected: OK in all versions.");
     } catch (e) {
         Report("RN11", "After", e, "Form.Init / box.Value / Server.LookupObject\nExpected: OK in all versions.");

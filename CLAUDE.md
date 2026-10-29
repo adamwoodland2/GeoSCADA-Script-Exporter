@@ -14,9 +14,9 @@ Logic programs are out of scope.
 |------|---------|
 | `GeoSCADA-Script-Exporter.ps1` | Connects to a Geo SCADA server through the .NET Client API and writes one `.txt` file per mimic or script library. Each file has a parseable header and then the raw script. It also writes `_ScriptExport_Manifest.csv`. Read-only against the database. |
 | `GeoSCADA-Script-Analyser.ps1` | Offline. Reads an export folder and reports what needs changing for Geo SCADA 2025 R2. Writes `_ScriptAnalysis.csv`, `_ScriptAnalysis_Actions.csv`, `_ScriptAnalysis_Instances.csv`, `_ScriptAnalysis_ExportCheck.csv` and a self-contained `_ScriptAnalysis.html`. No server connection. Exit code 3 when the export is incomplete. |
-| `Examples/RN-Examples-*.vbs / .js` | Before/after demo scripts for the version-dependent RN rules, used in the test mimics `Claude.Examples.Default` (VBScript) and `Claude.Examples.JScript`. |
+| `Examples/RN-Examples-*.vbs / .js` | Before/after demo scripts for the version-dependent RN rules, for a VBScript and a JScript test mimic. They may only use objects that always exist: the mimic running the script (`Server.ThisObject`) and the root group (Id 0). The one exception is RN01's `Test Analog` point, which the script looks for first and skips (after asking) when it's missing. |
 | `Tests/` | Analyser regression tests. They use synthetic export files, so no server is needed. |
-| `Tools/` (git-ignored) | Local test-system tools that **write** to the database, so they are kept out of the repository. `Build-ExampleMimics.ps1` writes the Examples scripts into the two example mimics. `Set-MimicScript.ps1` replaces the script of an existing `Claude.*` mimic and keeps everything else. Both are dry runs unless `-Write` is given. |
+| `Tools/` (git-ignored) | Local test-system tools that **write** to the database, so they are kept out of the repository. `Build-ExampleMimics.ps1` builds the example mimics `Claude.Examples.Default` / `.JScript` by cloning `Claude.Test`'s document, so it can't run while `Claude.Test` is missing, and a rebuild loses buttons added by hand (such as RN26's). `Set-MimicScript.ps1` replaces the script of an existing `Claude.*` mimic and keeps everything else. Both are dry runs unless `-Write` is given. |
 | `References/` (git-ignored) | Vendor documents: the 2025 R2 release notes PDF, `ClientAPI.chm` and a screenshot of a field-found script error. Not redistributable, so never commit them. |
 
 The parameters and disclaimer are modelled on https://github.com/adamwoodland2/GeoSCADA-Mimic-Walker.
@@ -28,12 +28,12 @@ Remote: https://github.com/adamwoodland2/GeoSCADA-Script-Exporter (branch `main`
 - **Geo SCADA:** 2025 R2 (build 88.9742.1). Client DLL: `C:\Program Files\Schneider Electric\ClearSCADA\ClearScada.Client.dll` (6.88.9742.1). Server: `127.0.0.1:5481`.
 - **This machine is a copy of production.** The data is real and sensitive. The logon is in `CLAUDE.local.md`, which is not committed.
 - **The server stops after a 2-hour runtime.** If a connection fails with the server not running, run `net start dbserver`. This is pre-approved.
-- **Licence limit:** the database is capped at 1,000 objects, so new points can't be created here. The RN01 example needs a point called `Test Analog`, which has to be created on a licensed test system.
+- **Licence limit:** the database is capped at 1,000 objects, so new points can't be created here. The RN01 example needs a point called `Test Analog`, which has to be created on a licensed test system; without it the example asks whether to carry on without RN01.
 - **Tools:** git and `gh` are installed; Python 3.14 is available but not used. There's no Node. For browser checks, use headless Edge at `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`.
 
 ## Rules for working here
 
-- **Never write to real database objects.** The only objects you may create or change are the test objects under `Claude.*` (`Claude.Test`, `Claude.Default`, `Claude.ArrayTest`, `Claude.Examples.*`). Never point an example at a real tag.
+- **Never write to real database objects.** The only objects you may create or change are test objects under `Claude.*`, and only the ones the task is about. The group's contents change, so check what is there first (see Current state). Never point an example at a real tag.
 - **The repository is read-only on the database.** Nothing committed may write to Geo SCADA: the exporter only reads, and the analyser and tests are offline. Anything that writes goes in the git-ignored `Tools/` folder.
 - **Customer-specific work stays local.** Scripts written for this system live in its mimics. Notes about them go in git-ignored `*.local.md` files. Keep site, object and user names out of committed files.
 - **Ask before running a full export.** It takes about 9 minutes and produces about 42,000 files; the user has stopped one before. Exporting single objects with `-Name` is fine.
@@ -54,7 +54,7 @@ Remote: https://github.com/adamwoodland2/GeoSCADA-Script-Exporter (branch `main`
 .\Tests\Run-Tests.ps1
 
 # Export one object or one group (fine to run); a full export needs the user's go-ahead
-.\GeoSCADA-Script-Exporter.ps1 -OutputFolder <dir> -Username <u> -Password <p> -Name 'Claude.ArrayTest' -AcceptDisclaimer
+.\GeoSCADA-Script-Exporter.ps1 -OutputFolder <dir> -Username <u> -Password <p> -Name 'Claude.<Mimic>' -AcceptDisclaimer
 .\GeoSCADA-Script-Exporter.ps1 -OutputFolder <dir> -Username <u> -Password <p> -Group 'Plant.Scripts' -AcceptDisclaimer
 
 # Analyse an export folder (about 30 s for a full export of ~42k files)
@@ -62,7 +62,8 @@ Remote: https://github.com/adamwoodland2/GeoSCADA-Script-Exporter (branch `main`
 #   -MinimumSeverity, -IncludeRule / -ExcludeRule RN01,GS03, -IncludeInstances, -SkipProgIdCheck, -NoHtml, -ManifestOnly
 #   Exit code 3 = report written, but the export is incomplete (see _ScriptAnalysis_ExportCheck.csv)
 
-# Local only (Tools/ is git-ignored): rebuild the example mimics after editing Examples\*.vbs / *.js
+# Local only (Tools/ is git-ignored): rebuild the example mimics after editing Examples\*.vbs / *.js.
+# Needs Claude.Test; a rebuild loses hand-added buttons, so prefer Set-MimicScript for an existing mimic.
 .\Tools\Build-ExampleMimics.ps1 -Username <u> -Password <p> -Write
 ```
 
@@ -211,4 +212,5 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
 
 - **Pushed** to `main` (history rewritten on 2026-10-15 to remove customer object names; keep examples generic, e.g. `Plant.*`, `Region.Site A.*`). Asking GitHub Support to purge the two old commit IDs is left to the user. Commit only when asked.
 - **GS03 is provisional** until there is a full export in format 2. The last full export (`full2`) is format 1, without the embedded-mimic data. Ask before running a new full export.
+- **Test mimics gone (checked 2026-10-29):** `Claude.Test`, `Claude.Default`, `Claude.ArrayTest`, `Claude.PerformanceTest` and `Claude.Examples.*` no longer exist on this server; the `Claude` group now holds other mimics. Ask before recreating any of them.
 - **Unconfirmed on R2:** the example mimics haven't been run in ViewX. Their "(to confirm)" expectations, and RN22's script-level `Dim` and parameter cases, are untested.
