@@ -64,6 +64,19 @@ foreach ($b in @(@('B1', $true, 'second parameter has no value'), @('B2', $false
     if ($hit -eq $b[1]) { Write-Host "PASS RN26 $($b[0]): $($b[2])" } else { $failed++; Write-Host "FAIL RN26 $($b[0]): $($b[2]) (reported: $hit)" -ForegroundColor Red }
 }
 
+# RN28 severity: Warning when code follows the log on / log off in the same procedure, Info when it is the last statement
+$rn28 = @($f | Where-Object { $_.Rule -eq 'RN28' })
+foreach ($c in @(@('T.RN28 Mimic', 'Sub LogOnThenWork', 'Warning'), @('T.RN28 Mimic', 'Sub LogOffLast', 'Info'),
+                 @('T.RN28 Mimic', 'Sub LogOnUserInIf', 'Info'), @('T.RN28 Mimic', 'Sub LogOffWithElse', 'Warning'),
+                 @('T.RN28 Mimic', 'Sub OpenViewX', 'Warning'), @('T.RN28 Mimic', 'Sub Chained', 'Info'),
+                 @('T.RN28 JS', 'function LogOnFirst', 'Warning'), @('T.RN28 JS', 'function LogOffLast', 'Info'),
+                 @('T.RN28 JS', 'function Other', 'Info'), @('T.V8 Mimic', 'function Test', 'Warning'))) {
+    $hit = @($rn28 | Where-Object { $_.FullName -eq $c[0] -and $_.Detail -like "* in $($c[1]) *" })
+    $sev = ($hit | ForEach-Object Severity) -join ','
+    if ($hit.Count -eq 1 -and $sev -eq $c[2]) { Write-Host "PASS RN28 $($c[0]) $($c[1]): $($c[2])" }
+    else { $failed++; Write-Host "FAIL RN28 $($c[0]) $($c[1]): expected one $($c[2]), got '$sev'" -ForegroundColor Red }
+}
+
 $bad = @($f | Where-Object { $_.FullName -eq 'T.TopLevel No Script' -and $_.Rule -in 'GS02', 'GS03' })
 if ($bad.Count) { $failed++; Write-Host "FAIL format-1 inline pick-action code treated as function calls: $($bad.Rule -join ',')" -ForegroundColor Red }
 else { Write-Host 'PASS format-1 inline pick-action code (scriptTopLevel/scriptCode) not treated as function calls' }

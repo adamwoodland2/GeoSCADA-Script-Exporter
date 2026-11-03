@@ -19,6 +19,12 @@ appear on the console, in the HTML report header, and in the `ExporterVersion`, 
 
 ## GeoSCADA-Script-Analyser
 
+### 1.4.0 (2026-11-03)
+
+- **New rule, RN28 (Warning / Info):** a log on or log off stops the script in 2025 R2. It covers `App.LogOn`, `App.LogOff`, `App.LogOnUser`, `App.LogOffUser`, and a `Logon` through ViewX COM automation (`CreateObject("Serck.ViewXApplication")`). It is a Warning when code follows the call in the same procedure, and Info when the call is already the last statement. From the Knowledge Base article's 2026-11-03 update.
+- **RN26:** now cites the Knowledge Base article, which has added the item. The fix text says the function fails to run in the 2025 R2 release version, that Schneider expect a future update to fix it, and to check the current release notes for the installed version.
+- The Knowledge Base reference records the date the article was last checked (2026-11-03).
+
 ### 1.3.1 (2026-10-29)
 
 - RN27 is worded as an expected 2025 R2 change: the "probable bug" note and its reference were removed. The HTML report no longer shows empty brackets for a rule without a reference.

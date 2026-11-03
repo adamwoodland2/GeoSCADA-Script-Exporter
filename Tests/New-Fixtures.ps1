@@ -141,6 +141,7 @@ function Test() {
     let d = LocalTimeToUTC(new Date());                      // EXPECT:RN17
     let x = new ActiveXObject("Scripting.FileSystemObject"); // EXPECT:RN15
     Form.Init("Pixels");                                     // EXPECT:RN18
+    App.LogOnUser("SYS", "user", "pw");                      // EXPECT:RN28
     let re = /it's "quoted"/;                                // NOT:RN11
     let p = Server.FindObject("A").Interface.Value(5);       // NOT:RN01
     Server.FindObject("A").Interface.Value(5);               // EXPECT:RN01
@@ -183,6 +184,58 @@ End Sub
 New-Fixture 'T.RN26 Lib' 'CScriptLibrary' 'VBScript' @('ReferencedByMimics: 1') @'
 Function LibTwo(x, ByVal y)
 End Function
+'@
+
+# RN28: log on / log off stops the script. Warning / Info per procedure is checked in Run-Tests.ps1.
+New-Fixture 'T.RN28 Mimic' 'CMimic' 'VBScript' @() @'
+Sub LogOnThenWork()
+    App.LogOn                                                 ' EXPECT:RN28
+    MsgBox "Logged on"
+End Sub
+Sub LogOffLast()
+    MsgBox "Bye"
+    App.LogOff                                                ' EXPECT:RN28
+End Sub
+Sub LogOnUserInIf(ok)
+    If ok Then
+        App.LogOnUser "SYS", "user", "pw"                     ' EXPECT:RN28
+    End If
+End Sub
+Sub LogOffWithElse(ok)
+    If ok Then app.logoff Else MsgBox "Stay"                  ' EXPECT:RN28
+End Sub
+Sub Mentions()
+    s = "App.LogOn in a string"                               ' NOT:RN28
+    ' App.LogOff in a comment                                   NOT:RN28
+    x = MyApp.LogOn                                           ' NOT:RN28
+    Set u = Server.FindObject("A.B")
+    u.LogOn                                                   ' NOT:RN28
+End Sub
+Public Sub OpenViewX
+    Set vx = CreateObject("Serck.ViewXApplication")
+    vx.Logon "MyServer", "MyUser", "MyPassword"               ' EXPECT:RN28
+    MsgBox "Logon OK"
+End Sub
+Sub Chained()
+    CreateObject("Serck.ViewXApplication").Logon "S", "U", "P"   ' EXPECT:RN28
+End Sub
+'@
+New-Fixture 'T.RN28 JS' 'CMimic' 'JScript' @() @'
+function LogOnFirst() {
+    App.LogOn();                                             // EXPECT:RN28
+    Form.Init("After");
+}
+function LogOffLast(ok) {
+    if (ok) {
+        App.LogOff();                                        // EXPECT:RN28
+    }
+}
+function Other() {
+    var s = "App.LogOn()";                                   // NOT:RN28
+    var app = GetSession(); app.logon();                     // NOT:RN28
+    var vx = new ActiveXObject("Serck.ViewXApplication");
+    vx.Logon("S", "U", "P");                                 // EXPECT:RN28
+}
 '@
 
 # RN23-RN25 (Knowledge Base "Adjustments for VBScript in Geo SCADA 2025 R2")

@@ -12,6 +12,9 @@ ScriptExport*/
 *.txt
 *.csv
 
+# Other stuff
+PerformanceTest/
+
 # Editor / OS cruft
 .vs/
 .vscode/

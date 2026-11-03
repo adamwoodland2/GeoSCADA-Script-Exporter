@@ -393,8 +393,9 @@ Edit the rule table at the top of the script to change a rule's severity.
 | RN23 | Warning | A VBScript variable `Set` from `Server.FindObject`, `Server.LookupObject` or `Server.ThisObject` (optionally `.Parent`) used as a value, for example `CStr(obj)`, `MsgBox obj`, `"Id: " & obj` or `obj = x`. A database object no longer has a default property, so `CStr(obj)` no longer gives its Id. The same exemptions as RN03 apply, and an object reached through `.Interface` is not tracked. | KB: Object Default Properties |
 | RN24 | Warning | A "not found" test that never works: `IsNull(obj)`, `IsEmpty(obj)`, `obj = Null` or `IsObject(obj)` on a `FindObject` / `LookupObject` result. These return `Nothing`, so use `If obj Is Nothing Then`. **Not a 2025 R2 change**: the test never worked, and the not-found case fails later with "Object required". Skipped when the script, or a library the mimic links, defines its own function of that name. | KB: Server.LookupObject returns Nothing |
 | RN25 | Warning | A date passed through the registry without conversion. Flagged: `SetRegistry` whose value is a date (`Now`, `Date`, `Time`, `DateAdd(…)` and the other date functions, a `Form.AddDateTime` control's `.Value`, or a variable set from one in the same procedure); a `GetRegistry` value passed straight to a date function (`FormatDateTime`, `DateDiff`, `Year` …); and a `GetRegistry` value written to a date-time control. The fix is `SetRegistry "Key", CLng(Int(CDbl(d)))`, then `CDate(GetRegistry("Key", 0))` to read it back. | KB: No implicit date/time to number conversions |
-| RN26 | Error / Warning | A Call Specific Function pick action that gives no value to one or more of the function's parameters. In 2025 R2 the function **does not run at all**, and no error is shown. Before R2 the missing parameters were passed as `Empty`. The function's parameters, found as for GS03, are compared with the pick action's `name <= value` entries; a parameter that is missing, or listed without a value, counts as unset. The fix is to give every parameter a value (`''` or `0` if it is not used), or to remove unused parameters. Error for VBScript, where it has been seen; Warning for JavaScript, which is untested. A call written with inline arguments is not checked. | Found in the field (reported to Schneider) |
+| RN26 | Error / Warning | A Call Specific Function pick action that gives no value to one or more of the function's parameters. In the 2025 R2 release version (88.9742.1) the function **does not run at all**, and no error is shown. Before R2 the missing parameters were passed as `Empty`. Schneider expect a future update to fix this, so check the current release notes for the version you have installed. The function's parameters, found as for GS03, are compared with the pick action's `name <= value` entries; a parameter that is missing, or listed without a value, counts as unset. The fix is to give every parameter a value (`''` or `0` if it is not used), or to remove unused parameters; this works in all versions. Error for VBScript, where it has been seen; Warning for JavaScript, which is untested. A call written with inline arguments is not checked. | KB: You need to provide all pick action parameters (first found in the field) |
 | RN27 | Review | Every `Form.AddListBox`. In 2025 R2 a list box holding more items than its rows shows a **horizontal** scroll bar instead of the vertical one shown before. List contents are usually filled at run time, so the script can't show whether there are more items than rows, and every list box is listed to check. If the horizontal scrolling is a problem, make the list tall enough for its items, or limit what it holds. | Found in the field |
+| RN28 | Warning / Info | A log on or log off: `App.LogOn`, `App.LogOff`, `App.LogOnUser`, `App.LogOffUser`, or a `Logon` through ViewX COM automation (`CreateObject("Serck.ViewXApplication")`). In 2025 R2 the script **stops at the call**, so nothing after it runs, including the rest of any procedure that called this one. The fix is to do everything else first and make the log on or log off the last thing the script does, or to move the follow-on work to its own pick action. Warning when code follows the call in the same procedure (an `Else` branch counts as code); Info when it is already the last statement there. `Form.Logon` is not checked: the article does not mention it. | KB: App.LogOn/Off and App.LogOnUser/OffUser and COM .LogOn will stop execution |
 | GS01 | Error | Link to a script library that does not exist. Needs the export run with `-CheckMissingLibraries`. | Exporter header |
 | GS02 | Error | Call Specific Function pick action (`scriptCall`) on a mimic that has no script. | Exporter header |
 | GS03 | Error | `scriptCall` pick action names a function not defined in the mimic script or its libraries. For an action on an embedded-mimic object, the embedded mimic's script and libraries are also checked. A single inline call (`FilterAlm 1, "x"`) is checked by its first name. | Exporter header |
@@ -406,7 +407,7 @@ Edit the rule table at the top of the script to change a rule's severity.
 
 The rule groups are:
 
-- **RN** rules: changes in the 2025 R2 script runtime. The page numbers refer to *Geo SCADA Expert 2025 R2 Release Notes* (88.9742.1). "KB" refers to the Geo SCADA Knowledge Base article [Adjustments for VBScript in Geo SCADA 2025 R2](https://community.se.com/t5/Geo-SCADA-Knowledge-Base/Adjustments-for-VBScript-in-Geo-SCADA-2025-R2/ba-p/555067). It repeats most of the release-note items and adds new ones as they are found (RN22–RN25). RN21, RN26 and RN27 were found in the field.
+- **RN** rules: changes in the 2025 R2 script runtime. The page numbers refer to *Geo SCADA Expert 2025 R2 Release Notes* (88.9742.1). "KB" refers to the Geo SCADA Knowledge Base article [Adjustments for VBScript in Geo SCADA 2025 R2](https://community.se.com/t5/Geo-SCADA-Knowledge-Base/Adjustments-for-VBScript-in-Geo-SCADA-2025-R2/ba-p/555067). It repeats most of the release-note items and adds new ones as they are found (RN22–RN26, RN28). RN21, RN26 and RN27 were found in the field.
 - **GS** rules: consistency and good-practice checks on what the export recorded.
 
 The rules are pattern-based, so treat findings as pointers to review, not as proof.
@@ -462,7 +463,7 @@ system before and after upgrading to 2025 R2:
 
 | File | Mimic language | Covers |
 | ---- | -------------- | ------ |
-| `RN-Examples-VBScript.vbs` | VBScript | RN01, RN02, RN03, RN04, RN05, RN06, RN10, RN21, RN23, RN24, RN25, RN26 (its own buttons), RN27 |
+| `RN-Examples-VBScript.vbs` | VBScript | RN01, RN02, RN03, RN04, RN05, RN06, RN10, RN21, RN23, RN24, RN25, RN26 (its own buttons), RN27, RN28 (its own buttons) |
 | `RN-Examples-JScript.js` | JScript | RN11, RN12 |
 
 **Setting up the mimic.**
@@ -474,7 +475,10 @@ system before and after upgrading to 2025 R2:
    - **RN26 Before:** set `One` to `'hello'` and leave `Two` blank.
    - **RN26 After:** set `One` to `'hello'` and `Two` to `'goodbye'`.
 
-   Before 2025 R2, both buttons show a message; the Before button shows `Two` as Empty. In 2025 R2 the Before button does nothing at all, with no error, while the After button works.
+   Before 2025 R2, both buttons show a message; the Before button shows `Two` as Empty. In the 2025 R2 release the Before button does nothing at all, with no error, while the After button works. Schneider expect a future update to fix this, so check the current release notes.
+5. For RN28 (VBScript), add two more buttons with a **Call Specific Function** pick action: **RN28 Before** → `RN28_Before` and **RN28 After** → `RN28_After`. A log on stops the script in 2025 R2, so RN28 isn't part of `Run_Examples` either. Each button opens the ViewX Log On window: log on again as the same user, or cancel.
+
+   Before 2025 R2, the Before button shows its message once the Log On window closes. In 2025 R2 it never does *(to confirm, including whether cancelling stops the script too)*. The After button shows its message first and then opens the Log On window, in every version.
 
 **What happens when it runs.**
 

@@ -49,6 +49,7 @@
         RN25  Date stored in / read from the registry unconverted        (no implicit date <-> number)
         RN26  Pick action leaves function parameters without a value     (function does not run at all)
         RN27  Form.AddListBox scrolling                                  (horizontal, not vertical - check)
+        RN28  App.LogOn / LogOff / LogOnUser / LogOffUser, COM .Logon    (the script stops at the call)
 
       Exporter metadata (GSxx)
         GS01  Link to a script library that does not exist
@@ -84,15 +85,23 @@
     date (Now, Date, Time, DateAdd ..., a Form.AddDateTime control's .Value, or a variable set
     from one) written with SetRegistry, and GetRegistry values used as dates without CDate.
 
-    RN26 is a field finding (reported to Schneider): in 2025 R2 a Call Specific Function pick
-    action whose function has a parameter with no value in the pick action configuration does not
-    run at all, with no error; before R2 the missing parameters were passed as Empty. It compares
-    the function's parameters (found as for GS03) with the "name <= value" entries of the
-    PickAction header line. Error for VBScript (seen); Warning for JavaScript (untested).
+    RN26 was first found in the field and is now in the article: in the 2025 R2 release version a
+    Call Specific Function pick action whose function has a parameter with no value in the pick
+    action configuration does not run at all, with no error; before R2 the missing parameters
+    were passed as Empty. Schneider expect a future update to fix this, so check the current
+    release notes for the version installed. It compares the function's parameters (found as for
+    GS03) with the "name <= value" entries of the PickAction header line. Error for VBScript
+    (seen); Warning for JavaScript (untested).
 
     RN27: in 2025 R2 a Form.AddListBox holding more items than its rows scrolls horizontally
     instead of vertically. List contents are usually filled at run time, so every
     Form.AddListBox is a Review.
+
+    RN28 (from the article): in 2025 R2 App.LogOn, App.LogOff, App.LogOnUser, App.LogOffUser and a
+    Logon through ViewX COM automation (CreateObject("Serck.ViewXApplication")) stop the script,
+    so nothing after the call runs. Warning when code follows the call in the same procedure (an
+    Else branch counts); Info when it is the last statement there, since the code that called the
+    procedure stops too. Form.Logon is not covered: the article does not mention it.
 
     Severities: Error (fails or misbehaves in 2025 R2), Warning (likely to misbehave - check),
     Review (behaviour or layout changed - look at it), Info (advisory).
@@ -204,14 +213,14 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AnalyserVersion = '1.3.1'      # see CHANGELOG.md; bump with every released change
+$AnalyserVersion = '1.4.0'      # see CHANGELOG.md; bump with every released change
 $SupportedFormat = 2      # newest exporter FormatVersion this analyser understands
 
 # =============================================================================================
 #  RULES  -  severity, title, fix and source for each rule. Edit severities here.
 # =============================================================================================
 $RN = 'Geo SCADA 2025 R2 Release Notes'
-$KB = 'Geo SCADA Knowledge Base: Adjustments for VBScript in Geo SCADA 2025 R2 (community.se.com, 2026-10-15)'
+$KB = 'Geo SCADA Knowledge Base: Adjustments for VBScript in Geo SCADA 2025 R2 (community.se.com; published 2026-10-15, checked 2026-11-03)'
 $Rules = [ordered]@{
     RN01 = @{ Severity = 'Error';   Title = '.Value(x) used to set a value'
               Fix = 'Assign instead: x.Interface.Value = 3.14. The Value property now takes precedence over the Value method, so .Value(x) raises a script error.'; Ref = "$RN p20 '[variable].Value and Similar Methods'" }
@@ -264,9 +273,11 @@ $Rules = [ordered]@{
     RN25 = @{ Severity = 'Warning'; Title = 'Date stored in or read from the registry without conversion'
               Fix = 'Convert explicitly: SetRegistry "Key", CLng(Int(CDbl(dateValue))) to store it as a Long, and CDate(GetRegistry("Key", 0)) when reading it back. Dates and numbers are no longer converted implicitly.'; Ref = "$KB 'No implicit date/time to number conversions or vice versa'" }
     RN26 = @{ Severity = 'Error';   Title = 'Pick action leaves function parameters without a value'
-              Fix = 'Give every parameter a value in the pick action configuration (an empty string '''' or 0 if it is not used), or remove the unused parameters from the function. In 2025 R2 the function does not run at all - with no error message - when any parameter has no value; before R2 the missing ones were passed as Empty.'; Ref = '2025 R2 script runtime (found in the field, reported to Schneider 2026-10; Resource Centre update expected)' }
+              Fix = 'Give every parameter a value in the pick action configuration (an empty string '''' or 0 if it is not used), or remove the unused parameters from the function. In the 2025 R2 release version (88.9742.1) the function does not run at all - with no error message - when any parameter has no value; before R2 the missing ones were passed as Empty. Schneider expect a future update to fix this, so check the current release notes for the version you have installed. Giving every parameter a value works in all versions.'; Ref = "$KB 'You need to provide all pick action parameters or the script will not run' (first found in the field)" }
     RN27 = @{ Severity = 'Review';  Title = 'List box scrolls horizontally when it has more items than rows'
               Fix = 'Check how each list box scrolls when it holds more items than its rows: in 2025 R2 it shows a horizontal scroll bar instead of the vertical one shown before. The content is usually dynamic, so every Form.AddListBox is listed. If the horizontal scrolling is a problem, make the list tall enough for its items (the rows argument or ListBox.Rows), or limit what it holds.'; Ref = '' }
+    RN28 = @{ Severity = 'Warning'; Title = 'Log on / log off stops the script'
+              Fix = 'In 2025 R2 a log on or log off stops the script: App.LogOn, App.LogOff, App.LogOnUser, App.LogOffUser, and a Logon through ViewX COM automation (CreateObject("Serck.ViewXApplication") ... .Logon). For security, ViewX cannot be sure the script would keep the same access to the mimic, libraries and objects, so nothing after the call runs - including the rest of any procedure that called this one. Do everything else first and make the log on or log off the last thing the script does, or move the follow-on work to its own pick action. Warning when code follows the call in the same procedure (an Else branch counts as code); Info when the call is already the last statement there.'; Ref = "$KB 'App.LogOn/Off and App.LogOnUser/OffUser and COM .LogOn will stop execution'" }
     GS01 = @{ Severity = 'Error';   Title = 'Linked script library does not exist'
               Fix = 'Remove the link or point it at the library''s current location.'; Ref = 'Exporter header LibraryMissing' }
     GS02 = @{ Severity = 'Error';   Title = 'Function pick action but the mimic has no script'
@@ -478,6 +489,11 @@ public static class GeoScadaScriptScan {
     public static int MatchParen(string s, int open) {
         int d = 0;
         for (int i = open; i < s.Length; i++) { if (s[i] == '(') d++; else if (s[i] == ')') { d--; if (d == 0) return i; } }
+        return -1;
+    }
+    public static int MatchBrace(string s, int open) {
+        int d = 0;
+        for (int i = open; i < s.Length; i++) { if (s[i] == '{') d++; else if (s[i] == '}') { d--; if (d == 0) return i; } }
         return -1;
     }
     public static int CountArgs(string s, int open, int close) {
@@ -844,6 +860,39 @@ function Get-DbObjectSource($Code, $Match) {
     return "Server.$call"
 }
 
+# RN28: does code follow the call at $Pos (whose name ends at $End) in the same procedure? Deliberately
+# conservative: only whitespace, block closers (End If / Next / Loop ..., '}' in JS) and Exit / return /
+# break are not counted, so an Else branch after the call counts as code. Returns @{ Follows; Where }.
+function Test-CodeFollows($Ctx, [int]$Pos, [int]$End, $VbsProcs) {
+    $code = $Ctx.Code
+    $where = if ($Ctx.Section -ne 'Script') { "the $($Ctx.Section) code" } else { 'the script' }
+    if ($Ctx.IsJs) {
+        $p = $End                                                        # skip the call's argument list
+        while ($p -lt $code.Length -and [char]::IsWhiteSpace($code[$p])) { $p++ }
+        if ($p -lt $code.Length -and $code[$p] -eq '(') { $c = [GeoScadaScriptScan]::MatchParen($code, $p); if ($c -ge 0) { $p = $c + 1 } }
+        $to = $code.Length; $best = -1                                   # the innermost function around the call
+        foreach ($f in [regex]::Matches($code, '(?:\bfunction\b\s*([A-Za-z_$][\w$]*)?\s*\([^)]*\)|=>)\s*\{')) {
+            $open = $f.Index + $f.Length - 1
+            if ($open -gt $Pos -or $open -lt $best) { continue }
+            $close = [GeoScadaScriptScan]::MatchBrace($code, $open)
+            if ($close -lt 0) { $close = $code.Length }
+            if ($close -gt $Pos) { $best = $open; $to = $close; $where = if ($f.Groups[1].Success) { "function $($f.Groups[1].Value)" } else { 'this function' } }
+        }
+        $rest = if ($to -gt $p) { $code.Substring($p, $to - $p) } else { '' }
+        $rest = [regex]::Replace($rest, '\b(?:return|break|continue)\b|[\s;}]', '')
+    } else {
+        $proc = $VbsProcs | Where-Object { $Pos -ge $_.Start -and $Pos -le $_.End } | Select-Object -First 1
+        if ($proc) { $where = "$($proc.Kind) $($proc.Name)" }
+        $eol = $code.IndexOfAny([char[]]"`r`n:", $End); if ($eol -lt 0) { $eol = $code.Length }
+        if ($code.Substring($End, $eol - $End) -match '(?i)\bElse\b') { return @{ Follows = $true; Where = $where } }   # If a Then App.LogOff Else ...
+        $to = if ($proc) { $proc.End } else { $code.Length }
+        $rest = if ($to -gt $eol) { $code.Substring($eol, $to - $eol) } else { '' }
+        $rest = [regex]::Replace($rest, '(?im)^[ \t:]*(?:End[ \t]+(?:If|Select|With|Sub|Function|Property)|Next|Loop|Wend|Exit[ \t]+\w+)\b[^\r\n:]*', '')
+        $rest = [regex]::Replace($rest, '[\s:]', '')
+    }
+    return @{ Follows = ($rest.Length -gt 0); Where = $where }
+}
+
 # --- Body rules ----------------------------------------------------------------
 function Invoke-BodyRules($Ctx) {
     $code = $Ctx.Code; $isJs = $Ctx.IsJs; $lang = $Ctx.Language
@@ -1106,8 +1155,40 @@ function Invoke-BodyRules($Ctx) {
         }
     }
 
+    # RN28 log on / log off stops the script: App.LogOn / LogOff / LogOnUser / LogOffUser (all languages), and a
+    # Logon through ViewX COM automation - a variable set from CreateObject("Serck.ViewXApplication"), or the
+    # call chained on directly (V8 has no COM: RN15 covers CreateObject there). Form.Logon is not covered.
+    $logons = [ordered]@{}                                              # position -> @(end of the name, what)
+    foreach ($m in [regex]::Matches($code, '(?<![\w$.])App\s*\.\s*(LogOnUser|LogOffUser|LogOn|LogOff)\b', $opt)) {   # JS: exact case (a wrong case is RN11's)
+        $logons[[string]$m.Index] = @(($m.Index + $m.Length), "App.$($m.Groups[1].Value)")
+    }
+    if (-not $isV8) {
+        $vxPattern = '(?i)(?<![\w$.])(?:(?:Set\s+)?([A-Za-z_$][\w$]*)\s*=\s*)?(?:new\s+)?(CreateObject|ActiveXObject)\s*\(\s*(["''])Serck\.ViewXApplication[^"'']*\3\s*\)'
+        foreach ($m in [regex]::Matches($Ctx.NoComments, $vxPattern)) {
+            $fnGroup = $m.Groups[2]
+            if ($code.Substring($fnGroup.Index, $fnGroup.Length) -ne $fnGroup.Value) { continue }       # text inside a string
+            $chained = [regex]::Match($code.Substring($m.Index + $m.Length), '^\s*\.\s*LogOn\b', 'IgnoreCase')
+            if ($chained.Success) { $logons[[string]$m.Index] = @(($m.Index + $m.Length + $chained.Length), "$($fnGroup.Value)(""Serck.ViewXApplication"").Logon") }
+            if ($m.Groups[1].Success) {
+                $var = $m.Groups[1].Value
+                foreach ($u in [regex]::Matches($code, "(?<![\w$.])$([regex]::Escape($var))\s*\.\s*LogOn\b", 'IgnoreCase')) {
+                    $logons[[string]$u.Index] = @(($u.Index + $u.Length), "$var.Logon (ViewX COM automation)")
+                }
+            }
+        }
+    }
+    if ($logons.Count) {
+        $procs = if ($isJs) { @() } else { (Get-VbsDeclarations $code).Procs.ToArray() }
+        foreach ($k in $logons.Keys) {
+            $pos = [int]$k; $what = $logons[$k][1]
+            $after = Test-CodeFollows $Ctx $pos ([int]$logons[$k][0]) $procs
+            if ($after.Follows) { Add-BodyFinding 'RN28' $Ctx $pos "$what stops the script in 2025 R2 - the code after it in $($after.Where) does not run" }
+            else { Add-BodyFinding 'RN28' $Ctx $pos "$what is the last statement in $($after.Where) - the script still stops here, so check that nothing calling it needs to carry on afterwards" 'Info' }
+        }
+    }
+
     # RN20 debugger statements
-    $dbg = if ($isJs) { '\bdebugger\b' } else { '(?im)^[ \t]*Stop[ \t]*\r?$' }
+    $dbg =if ($isJs) { '\bdebugger\b' } else { '(?im)^[ \t]*Stop[ \t]*\r?$' }
     foreach ($m in [regex]::Matches($code, $dbg)) { Add-BodyFinding 'RN20' $Ctx $m.Index $(if ($isJs) { 'debugger' } else { 'Stop' }) }
 
     # GS07 syntax looks like the other language

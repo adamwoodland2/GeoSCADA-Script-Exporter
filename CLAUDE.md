@@ -17,7 +17,7 @@ Logic programs are out of scope.
 | `Examples/RN-Examples-*.vbs / .js` | Before/after demo scripts for the version-dependent RN rules, for a VBScript and a JScript test mimic. They may only use objects that always exist: the mimic running the script (`Server.ThisObject`) and the root group (Id 0). The one exception is RN01's `Test Analog` point, which the script looks for first and skips (after asking) when it's missing. |
 | `Tests/` | Analyser regression tests. They use synthetic export files, so no server is needed. |
 | `Tools/` (git-ignored) | Local test-system tools that **write** to the database, so they are kept out of the repository. `Build-ExampleMimics.ps1` builds the example mimics `Claude.Examples.Default` / `.JScript` by cloning `Claude.Test`'s document, so it can't run while `Claude.Test` is missing, and a rebuild loses buttons added by hand (such as RN26's). `Set-MimicScript.ps1` replaces the script of an existing `Claude.*` mimic and keeps everything else. Both are dry runs unless `-Write` is given. |
-| `References/` (git-ignored) | Vendor documents: the 2025 R2 release notes PDF, `ClientAPI.chm` and a screenshot of a field-found script error. Not redistributable, so never commit them. |
+| `References/` (git-ignored) | Vendor documents: the 2025 R2 release notes PDF, printouts of the KB article, `ClientAPI.chm` and screenshots of field-found script issues. Not redistributable, so never commit them. |
 
 The parameters and disclaimer are modelled on https://github.com/adamwoodland2/GeoSCADA-Mimic-Walker.
 Remote: https://github.com/adamwoodland2/GeoSCADA-Script-Exporter (branch `main`).
@@ -96,7 +96,7 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
   - Also recorded: `IsControlledByInstance`.
   - Example: `Region.Site A.Pumps.Pump 1.Display.Tab Status` maps to `~Templates.Pump Station.Devices.Pump.Display.Tab Status`.
 - **File format:** the header lines are comments (`'` or `//`) between `===== GEOSCADA-SCRIPT-EXPORT BEGIN/END =====` markers, followed by the raw script.
-  - Current version: `FormatVersion: 2` (`ExporterVersion` 1.1.0; analyser 1.3.1). See `CHANGELOG.md`.
+  - Current version: `FormatVersion: 2` (`ExporterVersion` 1.1.0; analyser 1.4.0). See `CHANGELOG.md`.
   - Format 2 adds `PICKACTION <n>` code sections for inline pick-action code, `PickActionCode`, `ScriptStartLine` / `ScriptEndLine`, 7-field `PickAction` lines (`N | Where | Action | Type | Context | Function | Args`) and `EmbeddedMimic`.
   - The format is a parsing contract. If it changes, bump `FormatVersion`, update the README spec, and keep the analyser reading every older format. `Split-PickAction` handles both 1 and 2.
 - **File names:** the object's full name plus `.txt`. Invalid characters become `_`, and Windows device names (`CON`, `CON.Child`, `LPT1.x` …) get a leading `_`. Collisions get ` [Id]`. Paths of 248 characters or more use the `\\?\` prefix.
@@ -142,10 +142,11 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
 
 ### Rule conventions
 
-- **RN01–RN27:** Geo SCADA 2025 R2 runtime issues.
+- **RN01–RN28:** Geo SCADA 2025 R2 runtime issues.
   - RN01–RN20 cite release-note pages.
-  - RN21, RN26 and RN27 are field findings.
-  - RN22–RN25 cite the Knowledge Base article "Adjustments for VBScript in Geo SCADA 2025 R2" (`$KB` in the analyser; a printout is in `References/current rn info.pdf`). That article is updated over time, so re-check it for new items.
+  - RN21, RN26 and RN27 are field findings. RN26 (and RN27, which has no Ref on purpose) have since been added to the KB article.
+  - RN22–RN26 and RN28 cite the Knowledge Base article "Adjustments for VBScript in Geo SCADA 2025 R2" (`$KB` in the analyser, which records the date it was last checked; the latest printout is `References/Article on Changes 2026-11-03.pdf`). That article is updated over time, so re-check it for new items.
+  - **Reading the KB printouts:** they come from Microsoft Print to PDF, which draws most text as shapes, so text extraction gets almost nothing. Render the pages with the Windows `Windows.Data.Pdf` API from PowerShell 5.1 (`PdfDocument.LoadFromFileAsync` → `GetPage(i).RenderToStreamAsync` → PNG) and read the images.
   - **RN01:** flags `.Value(x)` only when the call is the whole statement (a set). Reads such as `y = (x.Interface.Value(0))` work.
   - **RN03:** flags any bare use of a variable `Set` from `Form.Add…` in the same procedure. Exempt:
     - `.Member`
@@ -163,12 +164,16 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
     - Skipped when the script or a linked library defines its own `isNull` etc. Real systems do this: on the test system, one library's own `isNull` would otherwise have given 28 false hits.
   - **RN25:** a date passed through `SetRegistry` / `GetRegistry` without `CLng(Int(CDbl(…)))` / `CDate`.
     - `$isDate` only matches a value that starts with a date, so `"Date: " & Now` (a string) is not flagged.
-  - **RN26:** a `scriptCall` pick action that gives no value to some of its function's parameters. In R2 the function silently doesn't run.
+  - **RN26:** a `scriptCall` pick action that gives no value to some of its function's parameters. In the R2 release (88.9742.1) the function silently doesn't run. The KB says a future update will fix it, so the wording says it is a problem in the release version and to check the current release notes. Keep it an Error until a fixed version ships.
     - It lives in the pick-action loop, next to GS03, and uses the parameter names now stored by `Get-FunctionDefs` (name → `string[]`).
     - A parameter counts as given only if it appears as `name <= value` in the PickAction `Args`. In the XML, a blank parameter is either missing or an `<Arg>` with no `<Animation>`; the exporter writes the latter as a bare name.
     - Header finding, so it's tested per button in `Run-Tests.ps1`, not by tags.
   - **RN27:** every `Form.AddListBox` is a Review: in R2 a list box with more items than rows scrolls horizontally. Contents are usually dynamic, so no attempt is made to count items. It's raised in the RN04 loop, so it always matches RN04's list boxes.
     - Treated as an expected R2 change, so the wording is neutral (no "bug" note) and it has no reference. The HTML omits the `[…]` for an empty `Ref`.
+  - **RN28:** `App.LogOn` / `LogOff` / `LogOnUser` / `LogOffUser` (all languages; exact case in JS, where a wrong case is RN11's), and `.Logon` on a variable set from `CreateObject("Serck.ViewXApplication")` or chained on it. In R2 the script stops at the call.
+    - `Test-CodeFollows` decides the severity: Warning when code follows in the same procedure, Info when the call is the last statement. In JS the procedure is the innermost enclosing `function … {` / `=> {` (`MatchBrace`).
+    - Deliberately conservative: only whitespace, block closers (`End If`, `Next`, `Loop`, `}` …) and `Exit` / `return` / `break` are ignored, so an `Else` branch counts as code.
+    - `Form.Logon` is not covered (not in the article). Severity is tested per procedure in `Run-Tests.ps1`.
 - **GS01–GS08:** best-practice and consistency checks from exporter metadata. Some will deliberately never be fixed, which is why the HTML filter remembers unticked rules.
 - **A new rule needs:**
   - an entry in `$Rules`;
@@ -184,7 +189,7 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
 ## Testing
 
 - **`Tests\Run-Tests.ps1`:** must pass before every commit. It builds fixtures in `%TEMP%\GeoSCADA-Script-Analyser-Tests` and runs four groups of checks:
-  - every `EXPECT:` / `NOT:` tag, by file line (currently 141 tags);
+  - every `EXPECT:` / `NOT:` tag, by file line (currently 157 tags), plus per-case checks for the RN26 buttons and RN28 severities;
   - template batching and the export check, with and without a manifest;
   - `-ManifestOnly`;
   - the exporter's helper functions.

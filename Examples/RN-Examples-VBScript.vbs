@@ -18,6 +18,8 @@
 ' RN26 is not part of Run_Examples: it is about how a pick action passes arguments, so it needs two
 ' buttons of its own calling RN26_PickAction - see the RN26 section below.
 ' RN27 is a visual check, like RN04 / RN05: look at the list box's scroll bar.
+' RN28 is not part of Run_Examples either: in 2025 R2 a log on stops the script, which would end the
+' run there. It needs two buttons of its own, calling RN28_Before and RN28_After.
 ' Expected behaviours marked "(to confirm)" come from the release notes or a field report and have
 ' not yet been observed side by side on both versions.
 Option Explicit
@@ -39,6 +41,7 @@ Public Sub Run_Examples()
     RN25_Before : RN25_After
     RN27_Before : RN27_After
     Results = Results & "RN26: run from its own two buttons (see RN26_PickAction in the script)" & vbCrLf
+    Results = Results & "RN28: run from its own two buttons (RN28_Before and RN28_After)" & vbCrLf
     MsgBox Results, vbInformation, "Geo SCADA 2025 R2 script examples - summary"
 End Sub
 
@@ -354,16 +357,19 @@ Sub RN25_After()
 End Sub
 
 '----------------------------------------------------------------------------------------------
-' RN26 - Pick action leaves a function parameter without a value (found in the field)
-' In 2025 R2 a Call Specific Function pick action whose function has a parameter with no value in
-' the pick action configuration does not run at all, and no error is shown. Before 2025 R2 the
-' missing parameter was passed as Empty.
+' RN26 - Pick action leaves a function parameter without a value (Knowledge Base: You need to provide
+' all pick action parameters or the script will not run; first found in the field)
+' In the 2025 R2 release version a Call Specific Function pick action whose function has a parameter
+' with no value in the pick action configuration does not run at all, and no error is shown. Before
+' 2025 R2 the missing parameter was passed as Empty. Schneider expect a future update to fix this:
+' check the current release notes for the version installed.
 '
 ' Not part of Run_Examples. Add two buttons to this mimic:
 '   "RN26 Before" - Call Specific Function -> RN26_PickAction, One = 'hello', Two left blank
 '   "RN26 After"  - Call Specific Function -> RN26_PickAction, One = 'hello', Two = 'goodbye'
 ' Expected: before 2025 R2 both buttons show the message (Before shows Two as Empty).
-' In 2025 R2 the Before button does nothing at all; the After button works.
+' In the 2025 R2 release the Before button does nothing at all (until the expected fix); the After
+' button works in all versions.
 '----------------------------------------------------------------------------------------------
 Public Sub RN26_PickAction(One, Two)
     Dim twoText
@@ -411,4 +417,30 @@ Sub RN27_After()
     Report "RN27", "After", Err.Number, Err.Description, _
         "Form.AddListBox(1, 1, 11, 1, items) - the list is tall enough for its items" & vbCrLf & _
         "Expected: no scroll bar in 2025 R2 (earlier versions showed fewer rows than requested - see RN04 - so may still scroll vertically)."
+End Sub
+
+'----------------------------------------------------------------------------------------------
+' RN28 - Log on / log off stops the script (Knowledge Base: App.LogOn/Off and App.LogOnUser/OffUser
+' and COM .LogOn will stop execution)
+' In 2025 R2 App.LogOn, App.LogOff, App.LogOnUser, App.LogOffUser and a Logon through ViewX COM
+' automation stop the script, so nothing after the call runs. Do the other work first.
+'
+' Not part of Run_Examples (it would end the run there). Add two buttons to this mimic:
+'   "RN28 Before" - Call Specific Function -> RN28_Before
+'   "RN28 After"  - Call Specific Function -> RN28_After
+' Each opens the ViewX Log On window: log on again as the same user, or cancel.
+' Expected: before 2025 R2 the Before button shows its message once the Log On window closes; in
+' 2025 R2 it never does (to confirm, also whether cancelling stops the script). The After button
+' shows its message first, then opens the Log On window, in all versions.
+'----------------------------------------------------------------------------------------------
+Public Sub RN28_Before()
+    App.LogOn
+    MsgBox "RN28 Before: the script carried on after App.LogOn." & vbCrLf & vbCrLf & _
+        "Expected: shown before 2025 R2; never shown in 2025 R2.", vbInformation, "Geo SCADA 2025 R2 script examples"
+End Sub
+
+Public Sub RN28_After()
+    MsgBox "RN28 After: everything else is done first. App.LogOn is the last statement, so nothing is lost when the script stops." & vbCrLf & vbCrLf & _
+        "Expected: shown in all versions, then the Log On window opens.", vbInformation, "Geo SCADA 2025 R2 script examples"
+    App.LogOn
 End Sub
