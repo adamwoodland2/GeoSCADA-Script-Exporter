@@ -31,26 +31,26 @@ New-FixtureV2 'T2.Parent' 'VBScript' @(
     'PickAction: 4 | L[Layer]/B2[Button] | A | scriptCode | Current | (code) | (none)',
     'EmbeddedMimic: L[Layer]/M_1[EmbeddedMimic] | T2.Symbol',
     'EmbeddedMimic: L[Layer]/M_2[EmbeddedMimic] | T2.Symbol') "Sub Local()`r`nEnd Sub" @(
-    @{ Id = 3; Code = "strParent = Server.ThisObject.Parent.FullName`r`nSet x = Server.FindObject(strParent)`r`nx.Interface.Value(1)                    ' EXPECT:RN01" },
-    @{ Id = 4; Code = "Set ie = CreateObject(""InternetExplorer.Application"")   ' EXPECT:RN09`r`nMsgBox ""ok""" })
+    @{ Id = 3; Code = "strParent = Server.ThisObject.Parent.FullName`r`nSet x = Server.FindObject(strParent)`r`nx.Interface.Value(1)                    ' EXPECT:RC01" },
+    @{ Id = 4; Code = "Set ie = CreateObject(""InternetExplorer.Application"")   ' EXPECT:RC08`r`nMsgBox ""ok""" })
 
 New-FixtureV2 'T2.Code Only No Script' 'None' @('PickAction: 1 | L[Layer]/B[Button] | A | scriptCode | Current | (code) | (none)') '' @(
-    @{ Id = 1; Code = "Stop                                                   ' EXPECT:RN20" })
+    @{ Id = 1; Code = "Stop                                                   ' EXPECT:RX04" })
 
 New-FixtureV2 'T2.V8 Code' 'JavaScriptV8' @('PickAction: 1 | L[Layer]/B[Button] | A | scriptCode | Current | (code) | (none)') "function Local() { }" @(
-    @{ Id = 1; Code = "MsgBox(""hi"");                                        // EXPECT:RN16" })
+    @{ Id = 1; Code = "MsgBox(""hi"");                                        // EXPECT:RX06" })
 
 New-FixtureV2 'T2.Registry' 'VBScript' @() ("Sub Score()`r`n" +
-"    OldScore = CLng(GetRegistry( ""SameGameScore"") )            ' EXPECT:RN21`r`n" +
-"    OldScore = CLng(GetRegistry( ""SameGameScore"", 0) )         ' NOT:RN21`r`n" +
-"    BestScore = CLng(App.GetRegistry(""SameGameBestScore""))     ' EXPECT:RN21`r`n" +
-"    s = GetRegistry(""Name"")                                     ' EXPECT:RN21`r`n" +
-"    t = GetRegistry(""Name"", """")                               ' NOT:RN21`r`n" +
-"    ' x = CLng(GetRegistry(""InComment""))                         NOT:RN21`r`n" +
-"    m = ""CLng(GetRegistry(""""InString""""))""                     ' NOT:RN21`r`n" +
+"    OldScore = CLng(GetRegistry( ""SameGameScore"") )            ' EXPECT:RX10`r`n" +
+"    OldScore = CLng(GetRegistry( ""SameGameScore"", 0) )         ' NOT:RX10`r`n" +
+"    BestScore = CLng(App.GetRegistry(""SameGameBestScore""))     ' EXPECT:RX10`r`n" +
+"    s = GetRegistry(""Name"")                                     ' EXPECT:RX10`r`n" +
+"    t = GetRegistry(""Name"", """")                               ' NOT:RX10`r`n" +
+"    ' x = CLng(GetRegistry(""InComment""))                         NOT:RX10`r`n" +
+"    m = ""CLng(GetRegistry(""""InString""""))""                     ' NOT:RX10`r`n" +
 "End Sub") @()
 
 New-FixtureV2 'T2.Registry JS' 'JavaScriptV8' @() ("function f() {`r`n" +
-"    let n = parseInt(GetRegistry(""Count""));                    // EXPECT:RN21`r`n" +
-"    let m = parseInt(GetRegistry(""Count"", ""0""));              // NOT:RN21`r`n" +
+"    let n = parseInt(GetRegistry(""Count""));                    // EXPECT:RX10`r`n" +
+"    let m = parseInt(GetRegistry(""Count"", ""0""));              // NOT:RX10`r`n" +
 "}") @()

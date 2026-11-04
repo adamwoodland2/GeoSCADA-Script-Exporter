@@ -19,6 +19,48 @@ appear on the console, in the HTML report header, and in the `ExporterVersion`, 
 
 ## GeoSCADA-Script-Analyser
 
+### 2.0.0 (2026-11-04)
+
+**Breaking: the rule IDs have changed.** The Resource Centre (Knowledge Base) article "Adjustments for VBScript in Geo SCADA 2025 R2" now numbers its items, and the rule IDs follow it. New prefixes are used, so no 1.x ID is reused with a different meaning:
+
+- **RC*nn*** (Resource Centre) is article item *nn*. A letter is added when one item has several checks (RC06a, RC06b). Item 5, form layout, needs no code change, so there is no RC05.
+- **JS*nn*** is the article's "Specific JScript Issues" section, in article order.
+- **RX*nn*** is any other 2025 R2 change, not in the article: from the release notes, or found in the field.
+- **GS01–GS08** are unchanged.
+- The 1.x IDs **RN01–RN28** are retired and will not be used again.
+
+This changes the `Rule` column of the CSV files and the rule references in the HTML report. To make the move easier:
+
+- `-IncludeRule` / `-ExcludeRule` still accept the 1.x IDs. Each one is translated to its new ID, with a note on the console (`-ExcludeRule RN27 is the analyser 1.x ID of RC06b ...`).
+- The HTML report shows each rule's 1.x ID ("was RN27") in the by-rule table and the rule filter, and the search box finds findings by their 1.x ID.
+- The HTML report carries rule-filter choices saved by a 1.x report over to the new IDs, the first time a 2.0.0 report is opened in that browser.
+- The README rules table has a "1.x rule" column.
+
+Entries below 2.0.0 in this file use the 1.x IDs.
+
+| Old | New | | Old | New | | Old | New |
+| --- | --- | - | --- | --- | - | --- | --- |
+| RN01 | RC01 | | RN11 | JS02 | | RN21 | RX10 |
+| RN02 | RC02 | | RN12 | JS03 | | RN22 | RC10 |
+| RN03 | RC03 | | RN13 | JS04 | | RN23 | RC04 |
+| RN04 | RC06a | | RN14 | JS05 | | RN24 | RC09 |
+| RN05 | RC07 | | RN15 | RX05 | | RN25 | RC11 |
+| RN06 | RX01 | | RN16 | RX06 | | RN26 | RC12 |
+| RN07 | RX02 | | RN17 | RX07 | | RN27 | RC06b |
+| RN08 | RX03 | | RN18 | RX08 | | RN28 | RC13 |
+| RN09 | RC08 | | RN19 | RX09 | | *new* | RC14a, RC14b |
+| RN10 | JS01 | | RN20 | RX04 | | | |
+
+- **New rules, RC14a (Warning) and RC14b (Info)**, from the article's 2026-11-04 update (item 14: "The Server.GetOPCValue method cannot read aggregates"). In the 2025 R2 release version, `Server.GetOPCValue` raises an error for an aggregate or a property inside one, such as `myPoint & ".Control.ControlMaximum"`. Schneider call it a temporary limitation that a future update will fix, so the text says to check the current release notes.
+  - A tag is a dotted name, so `Object.Property` and `Object.Aggregate.Property` look alike. RC14a is a call whose tag text names one of the 110 aggregates in the 2025 R2 database schema, after a dot. `AlarmSummary`, `PSTN` and `Shared` are also property names, so they count only when another name follows.
+  - RC14b lists every other `GetOPCValue`, so that tags built at run time can be reviewed. It can be hidden with the rule filter.
+- **References** cite the article's item numbers ("KB #6"). RC06b (formerly RN27) now cites item 6, which includes the horizontal-scrolling note.
+- **HTML report:**
+  - The rule filter has RC only, JS only and RX only shortcuts, and rules are listed RC, JS, RX, then GS.
+  - The severity and role filters are multi-select drop-downs like the rule filter, so several can be chosen at once (for example Error and Warning). Each choice shows its count, and All / None select or clear them all.
+  - A drop-down that would open past the edge of a narrow window is moved back inside it.
+- **Examples:** the example files are now `Examples/Rule-Examples-VBScript.vbs` and `Examples/Rule-Examples-JScript.js`. The before / after functions are renamed to the new IDs (for example `RC12_PickAction`, `RC13_Before`), and the VBScript examples have an RC14 pair that reads the mimic's own `GISLocation` aggregate.
+
 ### 1.4.0 (2026-11-03)
 
 - **New rule, RN28 (Warning / Info):** a log on or log off stops the script in 2025 R2. It covers `App.LogOn`, `App.LogOff`, `App.LogOnUser`, `App.LogOffUser`, and a `Logon` through ViewX COM automation (`CreateObject("Serck.ViewXApplication")`). It is a Warning when code follows the call in the same procedure, and Info when the call is already the last statement. From the Knowledge Base article's 2026-11-03 update.

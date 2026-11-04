@@ -14,9 +14,9 @@ Logic programs are out of scope.
 |------|---------|
 | `GeoSCADA-Script-Exporter.ps1` | Connects to a Geo SCADA server through the .NET Client API and writes one `.txt` file per mimic or script library. Each file has a parseable header and then the raw script. It also writes `_ScriptExport_Manifest.csv`. Read-only against the database. |
 | `GeoSCADA-Script-Analyser.ps1` | Offline. Reads an export folder and reports what needs changing for Geo SCADA 2025 R2. Writes `_ScriptAnalysis.csv`, `_ScriptAnalysis_Actions.csv`, `_ScriptAnalysis_Instances.csv`, `_ScriptAnalysis_ExportCheck.csv` and a self-contained `_ScriptAnalysis.html`. No server connection. Exit code 3 when the export is incomplete. |
-| `Examples/RN-Examples-*.vbs / .js` | Before/after demo scripts for the version-dependent RN rules, for a VBScript and a JScript test mimic. They may only use objects that always exist: the mimic running the script (`Server.ThisObject`) and the root group (Id 0). The one exception is RN01's `Test Analog` point, which the script looks for first and skips (after asking) when it's missing. |
+| `Examples/Rule-Examples-*.vbs / .js` | Before/after demo scripts for the version-dependent rules (RC, JS, RX), for a VBScript and a JScript test mimic. They may only use objects that always exist: the mimic running the script (`Server.ThisObject`) and the root group (Id 0). The one exception is RC01's `Test Analog` point, which the script looks for first and skips (after asking) when it's missing. |
 | `Tests/` | Analyser regression tests. They use synthetic export files, so no server is needed. |
-| `Tools/` (git-ignored) | Local test-system tools that **write** to the database, so they are kept out of the repository. `Build-ExampleMimics.ps1` builds the example mimics `Claude.Examples.Default` / `.JScript` by cloning `Claude.Test`'s document, so it can't run while `Claude.Test` is missing, and a rebuild loses buttons added by hand (such as RN26's). `Set-MimicScript.ps1` replaces the script of an existing `Claude.*` mimic and keeps everything else. Both are dry runs unless `-Write` is given. |
+| `Tools/` (git-ignored) | Local test-system tools that **write** to the database, so they are kept out of the repository. `Build-ExampleMimics.ps1` builds the example mimics `Claude.Examples.Default` / `.JScript` by cloning `Claude.Test`'s document, so it can't run while `Claude.Test` is missing, and a rebuild loses buttons added by hand (such as RC12's). `Set-MimicScript.ps1` replaces the script of an existing `Claude.*` mimic and keeps everything else. Both are dry runs unless `-Write` is given. |
 | `References/` (git-ignored) | Vendor documents: the 2025 R2 release notes PDF, printouts of the KB article, `ClientAPI.chm` and screenshots of field-found script issues. Not redistributable, so never commit them. |
 
 The parameters and disclaimer are modelled on https://github.com/adamwoodland2/GeoSCADA-Mimic-Walker.
@@ -28,7 +28,7 @@ Remote: https://github.com/adamwoodland2/GeoSCADA-Script-Exporter (branch `main`
 - **Geo SCADA:** 2025 R2 (build 88.9742.1). Client DLL: `C:\Program Files\Schneider Electric\ClearSCADA\ClearScada.Client.dll` (6.88.9742.1). Server: `127.0.0.1:5481`.
 - **This machine is a copy of production.** The data is real and sensitive. The logon is in `CLAUDE.local.md`, which is not committed.
 - **The server stops after a 2-hour runtime.** If a connection fails with the server not running, run `net start dbserver`. This is pre-approved.
-- **Licence limit:** the database is capped at 1,000 objects, so new points can't be created here. The RN01 example needs a point called `Test Analog`, which has to be created on a licensed test system; without it the example asks whether to carry on without RN01.
+- **Licence limit:** the database is capped at 1,000 objects, so new points can't be created here. The RC01 example needs a point called `Test Analog`, which has to be created on a licensed test system; without it the example asks whether to carry on without RC01.
 - **Tools:** git and `gh` are installed; Python 3.14 is available but not used. There's no Node. For browser checks, use headless Edge at `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`.
 
 ## Rules for working here
@@ -59,7 +59,7 @@ Remote: https://github.com/adamwoodland2/GeoSCADA-Script-Exporter (branch `main`
 
 # Analyse an export folder (about 30 s for a full export of ~42k files)
 .\GeoSCADA-Script-Analyser.ps1 -InputFolder <exportDir> -OutputFolder <reportDir>
-#   -MinimumSeverity, -IncludeRule / -ExcludeRule RN01,GS03, -IncludeInstances, -SkipProgIdCheck, -NoHtml, -ManifestOnly
+#   -MinimumSeverity, -IncludeRule / -ExcludeRule RC01,GS03, -IncludeInstances, -SkipProgIdCheck, -NoHtml, -ManifestOnly
 #   Exit code 3 = report written, but the export is incomplete (see _ScriptAnalysis_ExportCheck.csv)
 
 # Local only (Tools/ is git-ignored): rebuild the example mimics after editing Examples\*.vbs / *.js.
@@ -96,7 +96,7 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
   - Also recorded: `IsControlledByInstance`.
   - Example: `Region.Site A.Pumps.Pump 1.Display.Tab Status` maps to `~Templates.Pump Station.Devices.Pump.Display.Tab Status`.
 - **File format:** the header lines are comments (`'` or `//`) between `===== GEOSCADA-SCRIPT-EXPORT BEGIN/END =====` markers, followed by the raw script.
-  - Current version: `FormatVersion: 2` (`ExporterVersion` 1.1.0; analyser 1.4.0). See `CHANGELOG.md`.
+  - Current version: `FormatVersion: 2` (`ExporterVersion` 1.1.0; analyser 2.0.0). See `CHANGELOG.md`.
   - Format 2 adds `PICKACTION <n>` code sections for inline pick-action code, `PickActionCode`, `ScriptStartLine` / `ScriptEndLine`, 7-field `PickAction` lines (`N | Where | Action | Type | Context | Function | Args`) and `EmbeddedMimic`.
   - The format is a parsing contract. If it changes, bump `FormatVersion`, update the README spec, and keep the analyser reading every older format. `Split-PickAction` handles both 1 and 2.
 - **File names:** the object's full name plus `.txt`. Invalid characters become `_`, and Windows device names (`CON`, `CON.Child`, `LPT1.x` …) get a leading `_`. Collisions get ` [Id]`. Paths of 248 characters or more use the `\\?\` prefix.
@@ -137,50 +137,59 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
   - Cast values explicitly to `[string]`, `[int]` or `[string[]]`, or the serialiser hits circular references.
   - The UI provides:
     - a by-rule table listing every rule in `$Rules`, in rule order, sortable by any column. A rule with no findings shows `0`; a rule that didn't run shows `—` and the reason (`x` in the rules JSON);
-    - a multi-select rule filter with All / None / RN only / GS only shortcuts, whose unticked rules are saved in `localStorage`;
-    - severity, role and language filters, and search.
+    - a multi-select rule filter with All / None / RC only / JS only / RX only / GS only shortcuts, whose unticked rules are saved in `localStorage` (key `…rulesOff.v2`). When that key is missing, the 1.x key (`…rulesOff`) is read once and its RN IDs translated through `OLD` (built from each rule's `o`, its 1.x ID);
+    - each rule's 1.x ID ("was RN27") in the by-rule table and the filter's tooltip; search also matches it;
+    - rule order from `ruleCmp`: prefix order RC, JS, RX, GS (`PREFIX`), then a numeric compare, so RC06a < RC06b < RC07;
+    - severity and role filters: multi-select drop-downs like the rule filter, built by `makePick` (All / None, a count per choice, not remembered between reports); a language `<select>`; and search. Every `details.pick` closes on an outside click or Escape and is shifted back inside the window when it opens.
 
 ### Rule conventions
 
-- **RN01–RN28:** Geo SCADA 2025 R2 runtime issues.
-  - RN01–RN20 cite release-note pages.
-  - RN21, RN26 and RN27 are field findings. RN26 (and RN27, which has no Ref on purpose) have since been added to the KB article.
-  - RN22–RN26 and RN28 cite the Knowledge Base article "Adjustments for VBScript in Geo SCADA 2025 R2" (`$KB` in the analyser, which records the date it was last checked; the latest printout is `References/Article on Changes 2026-11-03.pdf`). That article is updated over time, so re-check it for new items.
+- **Rule IDs (since 2.0.0) follow the Resource Centre (Knowledge Base) article** "Adjustments for VBScript in Geo SCADA 2025 R2" (`$KB` in the analyser, which records the date it was last checked; the latest printout is `References/Article on Changes 2026-11-04.pdf`). The article is updated over time, so re-check it for new items.
+  - **RC*nn*:** article item *nn* (RC = Resource Centre), letter-suffixed when one item has several checks (RC06a row count / RC06b scrolling; RC14a known aggregate / RC14b every other GetOPCValue). Item 5 (form layout) has no rule. A new article item gets the next RC number.
+  - **JS*nn*:** the article's "Specific JScript Issues" section (unnumbered there), in article order: JS01 ScriptControl (also checked in VBScript), JS02 case, JS03 Booleans, JS04 pick-action arguments, JS05 JScript in use.
+  - **RX*nn*:** 2025 R2 changes not in the article: RX01–RX03 64-bit COM, RX04 debugger, RX05–RX09 V8, RX10 GetRegistry default (field). If the article adds one of these, move it to RC (a breaking change; the RX number is retired, not reused).
+  - **GS*nn*:** exporter-metadata checks (unchanged since 1.x).
+  - **Never reuse an ID.** The 1.x IDs **RN01–RN28** are retired; the user chose new prefixes so that no old ID means something new. `$OldRuleIds` (after `$Rules`) maps each 1.x ID to its 2.0.0 ID: `-IncludeRule` / `-ExcludeRule` translate them (`Resolve-RuleIds`, with a console note), and the HTML shows them. `Run-Tests.ps1` checks the map covers RN01–RN28 once each, points at real rules, and agrees with the README "1.x rule" column and the CHANGELOG 2.0.0 table.
+  - Renumbering is breaking (major version): the `Rule` CSV column changes. Use new IDs, extend the old → new map, put a table in `CHANGELOG.md`, and do the rename in one pass with all IDs mapped at once, so renames can't chain. The 2.0.0 rename was checked by running 1.4.0 and 2.0.0 over both exports: every finding matched line-for-line under its new ID.
+  - Refs cite the item number (`$KB #6 '…'`) plus the release-notes page where there is one.
   - **Reading the KB printouts:** they come from Microsoft Print to PDF, which draws most text as shapes, so text extraction gets almost nothing. Render the pages with the Windows `Windows.Data.Pdf` API from PowerShell 5.1 (`PdfDocument.LoadFromFileAsync` → `GetPage(i).RenderToStreamAsync` → PNG) and read the images.
-  - **RN01:** flags `.Value(x)` only when the call is the whole statement (a set). Reads such as `y = (x.Interface.Value(0))` work.
-  - **RN03:** flags any bare use of a variable `Set` from `Form.Add…` in the same procedure. Exempt:
+  - **RC01:** flags `.Value(x)` only when the call is the whole statement (a set). Reads such as `y = (x.Interface.Value(0))` work.
+  - **RC03:** flags any bare use of a variable `Set` from `Form.Add…` in the same procedure. Exempt:
     - `.Member`
     - `Set y = x`
     - `x Is Nothing`
     - `IsObject` / `TypeName`
     - passing `x` to the user's own sub or function
-  - **RN21:** `GetRegistry` without a default.
-  - **RN22:** an **undeclared** VBScript variable named `ToString`, `GetType`, `GetHashCode` or `Equals` is an Error. The R2 VBScript runtime is .NET-based, so these resolve to .NET members.
+  - **RC10:** an **undeclared** VBScript variable named `ToString`, `GetType`, `GetHashCode` or `Equals` is an Error. The R2 VBScript runtime is .NET-based, so these resolve to .NET members.
     - `Dim` in the same procedure is OK (tested, reported as Info).
     - A script-level `Dim`, a parameter, or a Sub/Function of that name is untested, so a Warning.
-  - **RN23:** a variable `Set` from `Server.FindObject` / `LookupObject` / `ThisObject` (optionally `.Parent`) used as a value. It shares `Get-SetVariables` and `Find-ValueUses` with RN03, so keep their exemptions in step.
-  - **RN24:** `IsNull` / `IsEmpty` / `= Null` / `IsObject` used as a not-found test on a `FindObject`/`LookupObject` result.
+  - **RC04:** a variable `Set` from `Server.FindObject` / `LookupObject` / `ThisObject` (optionally `.Parent`) used as a value. It shares `Get-SetVariables` and `Find-ValueUses` with RC03, so keep their exemptions in step.
+  - **RC06b:** every `Form.AddListBox` is a Review: in R2 a list box with more items than rows scrolls horizontally. Contents are usually dynamic, so no attempt is made to count items. It's raised in the RC06a loop, so it always matches RC06a's list boxes. Treated as an expected R2 change, so the wording is neutral (no "bug" note).
+  - **RC09:** `IsNull` / `IsEmpty` / `= Null` / `IsObject` used as a not-found test on a `FindObject`/`LookupObject` result.
     - Not an R2 change: the test never worked.
     - Skipped when the script or a linked library defines its own `isNull` etc. Real systems do this: on the test system, one library's own `isNull` would otherwise have given 28 false hits.
-  - **RN25:** a date passed through `SetRegistry` / `GetRegistry` without `CLng(Int(CDbl(…)))` / `CDate`.
+  - **RC11:** a date passed through `SetRegistry` / `GetRegistry` without `CLng(Int(CDbl(…)))` / `CDate`.
     - `$isDate` only matches a value that starts with a date, so `"Date: " & Now` (a string) is not flagged.
-  - **RN26:** a `scriptCall` pick action that gives no value to some of its function's parameters. In the R2 release (88.9742.1) the function silently doesn't run. The KB says a future update will fix it, so the wording says it is a problem in the release version and to check the current release notes. Keep it an Error until a fixed version ships.
+  - **RC12:** a `scriptCall` pick action that gives no value to some of its function's parameters. In the R2 release (88.9742.1) the function silently doesn't run. The KB says a future update will fix it, so the wording says it is a problem in the release version and to check the current release notes. Keep it an Error until a fixed version ships.
     - It lives in the pick-action loop, next to GS03, and uses the parameter names now stored by `Get-FunctionDefs` (name → `string[]`).
     - A parameter counts as given only if it appears as `name <= value` in the PickAction `Args`. In the XML, a blank parameter is either missing or an `<Arg>` with no `<Animation>`; the exporter writes the latter as a bare name.
     - Header finding, so it's tested per button in `Run-Tests.ps1`, not by tags.
-  - **RN27:** every `Form.AddListBox` is a Review: in R2 a list box with more items than rows scrolls horizontally. Contents are usually dynamic, so no attempt is made to count items. It's raised in the RN04 loop, so it always matches RN04's list boxes.
-    - Treated as an expected R2 change, so the wording is neutral (no "bug" note) and it has no reference. The HTML omits the `[…]` for an empty `Ref`.
-  - **RN28:** `App.LogOn` / `LogOff` / `LogOnUser` / `LogOffUser` (all languages; exact case in JS, where a wrong case is RN11's), and `.Logon` on a variable set from `CreateObject("Serck.ViewXApplication")` or chained on it. In R2 the script stops at the call.
+  - **RC13:** `App.LogOn` / `LogOff` / `LogOnUser` / `LogOffUser` (all languages; exact case in JS, where a wrong case is JS02's), and `.Logon` on a variable set from `CreateObject("Serck.ViewXApplication")` or chained on it. In R2 the script stops at the call.
     - `Test-CodeFollows` decides the severity: Warning when code follows in the same procedure, Info when the call is the last statement. In JS the procedure is the innermost enclosing `function … {` / `=> {` (`MatchBrace`).
     - Deliberately conservative: only whitespace, block closers (`End If`, `Next`, `Loop`, `}` …) and `Exit` / `return` / `break` are ignored, so an `Else` branch counts as code.
     - `Form.Logon` is not covered (not in the article). Severity is tested per procedure in `Run-Tests.ps1`.
+  - **RC14a / RC14b:** `Server.GetOPCValue` can't read aggregates in the R2 release (a temporary limitation; wording says to check the current release notes). A tag string can't tell `Object.Property` from `Object.Aggregate.Property`, so RC14a (Warning) only fires when a string literal in the argument names one of `$AggregateNames` after a dot. RC14b (Info, the user's choice) lists every other call.
+    - `$AggregateNames` is the 110 aggregate names from the 2025 R2 schema, read through `Connection.GetClass('CDBObject')` → `DerivedClasses` / `Aggregates` / `AggregateClasses` (read-only). `$AggregatesAlsoProperties` (AlarmSummary, PSTN, Shared) are also property names, so they need a following name. Re-read the schema on a new version.
+    - On the two exports, RC14a found 2 per export (both real `.Control.Action1Desc` reads); RC14b about 1,600 / 400.
+    - `GISLocation` exists on every `CDBObject` (it can't be disabled), so examples can use `Server.ThisObject.FullName & ".GISLocation.Latitude"`.
+  - **RX10:** `GetRegistry` without a default.
 - **GS01–GS08:** best-practice and consistency checks from exporter metadata. Some will deliberately never be fixed, which is why the HTML filter remembers unticked rules.
 - **A new rule needs:**
   - an entry in `$Rules`;
   - the help-text list near the top of the analyser;
-  - the README rules table;
+  - the README rules table, with `*new*` in its "1.x rule" column;
   - `EXPECT:` / `NOT:` tagged lines in `Tests/New-Fixtures*.ps1`, including the false-positive cases;
-  - for a version-dependent RN rule, a Before/After pair in `Examples/` (plus a rebuild).
+  - for a version-dependent rule, a Before/After pair in `Examples/Rule-Examples-*` (plus a rebuild).
 - **False positives matter.** After changing a rule, re-analyse a full export and diff that rule's findings against the previous report.
 - **Field facts behind the rules:**
   - Script error positions in ViewX are **0-based** (line, column).
@@ -188,11 +197,12 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
 
 ## Testing
 
-- **`Tests\Run-Tests.ps1`:** must pass before every commit. It builds fixtures in `%TEMP%\GeoSCADA-Script-Analyser-Tests` and runs four groups of checks:
-  - every `EXPECT:` / `NOT:` tag, by file line (currently 157 tags), plus per-case checks for the RN26 buttons and RN28 severities;
+- **`Tests\Run-Tests.ps1`:** must pass before every commit. It builds fixtures in `%TEMP%\GeoSCADA-Script-Analyser-Tests` and runs five groups of checks:
+  - every `EXPECT:` / `NOT:` tag, by file line (currently 184 tags), plus per-case checks for the RC12 buttons and RC13 severities;
   - template batching and the export check, with and without a manifest;
   - `-ManifestOnly`;
-  - the exporter's helper functions.
+  - the exporter's helper functions;
+  - the 1.x rule IDs: the `$OldRuleIds` map (read from the analyser's syntax tree) against `$Rules`, the README and the CHANGELOG, and `-IncludeRule` / `-ExcludeRule` with a 1.x ID.
 
   The fixture and test scripts:
   - `New-Fixtures.ps1`: format 1, with the rule tags.
@@ -218,4 +228,4 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
 - **Pushed** to `main` (history rewritten on 2026-10-15 to remove customer object names; keep examples generic, e.g. `Plant.*`, `Region.Site A.*`). Asking GitHub Support to purge the two old commit IDs is left to the user. Commit only when asked.
 - **GS03 is provisional** until there is a full export in format 2. The last full export (`full2`) is format 1, without the embedded-mimic data. Ask before running a new full export.
 - **Test mimics gone (checked 2026-10-29):** `Claude.Test`, `Claude.Default`, `Claude.ArrayTest`, `Claude.PerformanceTest` and `Claude.Examples.*` no longer exist on this server; the `Claude` group now holds other mimics. Ask before recreating any of them.
-- **Unconfirmed on R2:** the example mimics haven't been run in ViewX. Their "(to confirm)" expectations, and RN22's script-level `Dim` and parameter cases, are untested.
+- **Unconfirmed on R2:** the example mimics haven't been run in ViewX. Their "(to confirm)" expectations, and RC10's script-level `Dim` and parameter cases, are untested.

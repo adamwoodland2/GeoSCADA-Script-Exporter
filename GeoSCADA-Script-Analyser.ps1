@@ -18,90 +18,109 @@
     Works offline on the exported .txt files; it does not connect to Geo SCADA.
 
     Each file's header (see the exporter's README) is parsed and the script body is checked
-    against a set of rules. Most rules come from the Geo SCADA 2025 R2 release notes ("Mimic and
-    Global Script Execution" and following sections); the rest use the exporter's metadata:
+    against a set of rules. Rule IDs follow the Resource Centre (Knowledge Base) article
+    "Adjustments for VBScript in Geo SCADA 2025 R2", whose items are numbered; the other rules come
+    from the 2025 R2 release notes, from the field, or use the exporter's metadata:
 
-      Release notes (RNxx)
-        RN01  .Value(x) used as a statement to set a value (not reads)   (raises an error now)
-        RN02  Return value of Menu.Init / AddItem / Separator used       (now Null)
-        RN03  Form control used without .Value (default property)        (raises an error now)
-        RN04  Form.AddListBox row count                                  (now exact - check layout)
-        RN05  Form.AddQuery row count                                    (now exact - check layout)
-        RN06  CreateObject / ActiveXObject of a 32-bit-only COM class    (ViewX is now 64-bit)
-        RN07  CreateObject / ActiveXObject of a class not registered here
-        RN08  CreateObject / ActiveXObject with a computed ProgID        (cannot be checked)
-        RN09  Clipboard through Internet Explorer                        (use the Clipboard object)
-        RN10  ScriptControl COM object                                   (not recommended / 32-bit)
-        RN11  JScript / V8 wrong-case Geo SCADA name (e.g. .value, LookUpObject, Form.init)
-        RN12  JScript / V8 number assigned to a Boolean property         (e.g. ok.Default = 1)
-        RN13  JScript pick action passes arguments                       (fails with JScript9Legacy)
-        RN14  JScript in use                                             (not recommended)
-        RN15  CreateObject / ActiveXObject in JavaScript V8              (not supported)
-        RN16  MsgBox / InputBox in JavaScript V8                         (use Window.Alert/Confirm/Prompt)
-        RN17  LocalTimeToUTC / UTCToLocalTime in JavaScript V8           (not supported)
-        RN18  Form layout in JavaScript V8                               (pixel units)
-        RN19  JavaScript V8 client compatibility                         (2025 R2 clients only)
-        RN20  Stop / debugger statement                                  (script debugger removed)
-        RN21  GetRegistry without a default value                        (Null / empty when unset)
-        RN22  Undeclared ToString / GetType / Equals / GetHashCode       (clashes with .NET member)
-        RN23  Database object variable used as a value                   (no default property now)
-        RN24  Object not found tested with IsNull / = Null / IsObject    (use Is Nothing)
-        RN25  Date stored in / read from the registry unconverted        (no implicit date <-> number)
-        RN26  Pick action leaves function parameters without a value     (function does not run at all)
-        RN27  Form.AddListBox scrolling                                  (horizontal, not vertical - check)
-        RN28  App.LogOn / LogOff / LogOnUser / LogOffUser, COM .Logon    (the script stops at the call)
+      Resource Centre article items (RCnn = item nn; a letter when one item has several checks)
+        RC01   .Value(x) used as a statement to set a value (not reads)  (raises an error now)
+        RC02   Return value of Menu.Init / AddItem / Separator used      (now Null)
+        RC03   Form control used without .Value (default property)       (raises an error now)
+        RC04   Database object variable used as a value                  (no default property now)
+               (item 5, form layout, needs no code change and has no rule)
+        RC06a  Form.AddListBox row count                                 (now exact - check layout)
+        RC06b  Form.AddListBox scrolling                                 (horizontal, not vertical - check)
+        RC07   Form.AddQuery row count                                   (now exact - check layout)
+        RC08   Clipboard through Internet Explorer                       (use the Clipboard object)
+        RC09   Object not found tested with IsNull / = Null / IsObject   (use Is Nothing)
+        RC10   Undeclared ToString / GetType / Equals / GetHashCode      (clashes with .NET member)
+        RC11   Date stored in / read from the registry unconverted       (no implicit date <-> number)
+        RC12   Pick action leaves function parameters without a value    (function does not run at all)
+        RC13   App.LogOn / LogOff / LogOnUser / LogOffUser, COM .Logon   (the script stops at the call)
+        RC14a  GetOPCValue tag names a known aggregate                   (cannot read aggregates)
+        RC14b  Every other GetOPCValue                                   (Info - check for aggregates)
 
-      Exporter metadata (GSxx)
-        GS01  Link to a script library that does not exist
-        GS02  Call Specific Function pick action but the mimic has no script
-        GS03  Pick action calls a function that is not defined
-        GS04  Pick action function name differs only in case (JScript / V8)
-        GS05  Pick action function could not be verified (library not in the export)
-        GS06  Mimic links a library written in a different language
-        GS07  Script syntax does not match its language setting
-        GS08  Script library not linked by any mimic
+      The article's "Specific JScript Issues" (JSnn)
+        JS01   ScriptControl COM object                                  (not recommended / 32-bit)
+        JS02   JScript / V8 wrong-case Geo SCADA name (e.g. .value, LookUpObject, Form.init)
+        JS03   JScript / V8 number assigned to a Boolean property        (e.g. ok.Default = 1)
+        JS04   JScript pick action passes arguments                      (fails with JScript9Legacy)
+        JS05   JScript in use                                            (not recommended)
+
+      Other 2025 R2 changes, not in the article (RXnn)
+        RX01   CreateObject / ActiveXObject of a 32-bit-only COM class   (ViewX is now 64-bit)
+        RX02   CreateObject / ActiveXObject of a class not registered here
+        RX03   CreateObject / ActiveXObject with a computed ProgID       (cannot be checked)
+        RX04   Stop / debugger statement                                 (script debugger removed)
+        RX05   CreateObject / ActiveXObject in JavaScript V8             (not supported)
+        RX06   MsgBox / InputBox in JavaScript V8                        (use Window.Alert/Confirm/Prompt)
+        RX07   LocalTimeToUTC / UTCToLocalTime in JavaScript V8          (not supported)
+        RX08   Form layout in JavaScript V8                              (pixel units)
+        RX09   JavaScript V8 client compatibility                        (2025 R2 clients only)
+        RX10   GetRegistry without a default value                       (Null / empty when unset)
+
+      Exporter metadata (GSnn)
+        GS01   Link to a script library that does not exist
+        GS02   Call Specific Function pick action but the mimic has no script
+        GS03   Pick action calls a function that is not defined
+        GS04   Pick action function name differs only in case (JScript / V8)
+        GS05   Pick action function could not be verified (library not in the export)
+        GS06   Mimic links a library written in a different language
+        GS07   Script syntax does not match its language setting
+        GS08   Script library not linked by any mimic
+
+    Rule IDs changed in 2.0.0 to follow the article's numbering: RC, JS and RX replace the 1.x IDs
+    RN01-RN28, and GS is unchanged. No 1.x ID is reused, so -IncludeRule / -ExcludeRule still accept
+    the 1.x IDs (translated, with a note) and the HTML report shows each rule's 1.x ID. CHANGELOG.md
+    and the README rules table map them.
 
     Inline pick-action code (Execute Code Fragment, also on the top-level mimic) is scanned with the
     same rules as the script; findings give its Section (e.g. "PickAction 3"). Function references
     (GS02-GS05) apply to Call Specific Function actions only, and for an action on an embedded-mimic
     object the embedded mimic's script and libraries are searched too.
 
-    RN21 is a 2025 R2 runtime issue found in the field rather than in the release notes:
-    GetRegistry("Key") returns Null or an empty string when the key has not been set, so
-    converting it (CLng ...) fails. It is an Error when the call is wrapped directly in a
-    conversion function and a Warning otherwise.
+    RC04 treats a variable Set from Server.FindObject / LookupObject / ThisObject like RC03 treats a
+    Form control. RC09 is not a 2025 R2 change (the test never worked) but is listed in the article;
+    it is skipped for IsNull / IsEmpty / IsObject when the script or a linked library defines its own
+    function of that name.
 
-    RN22 is another field finding: the 2025 R2 VBScript runtime treats an undeclared variable
+    RC10 was first found in the field: the 2025 R2 VBScript runtime treats an undeclared variable
     called ToString, GetType, GetHashCode or Equals (any case) as the .NET member, so assigning it
-    fails with "The object has no suitable property or field named 'ToString'" (Error on each
-    use). Dim in the same procedure avoids it (Info, once); a script-level declaration, parameter
-    or Sub / Function of that name is untested (Warning, once). The Knowledge Base article
-    "Adjustments for VBScript in Geo SCADA 2025 R2" has since confirmed it.
+    fails with "The object has no suitable property or field named 'ToString'" (Error on each use).
+    Dim in the same procedure avoids it (Info, once); a script-level declaration, parameter or
+    Sub / Function of that name is untested (Warning, once).
 
-    RN23-RN25 come from that article. RN23 treats a variable Set from Server.FindObject /
-    LookupObject / ThisObject like RN03 treats a Form control. RN24 is not a 2025 R2 change (the
-    test never worked) but is listed in the article; it is skipped for IsNull / IsEmpty / IsObject
-    when the script or a linked library defines its own function of that name. RN25 looks for a
-    date (Now, Date, Time, DateAdd ..., a Form.AddDateTime control's .Value, or a variable set
-    from one) written with SetRegistry, and GetRegistry values used as dates without CDate.
+    RC11 looks for a date (Now, Date, Time, DateAdd ..., a Form.AddDateTime control's .Value, or a
+    variable set from one) written with SetRegistry, and GetRegistry values used as dates without
+    CDate.
 
-    RN26 was first found in the field and is now in the article: in the 2025 R2 release version a
-    Call Specific Function pick action whose function has a parameter with no value in the pick
-    action configuration does not run at all, with no error; before R2 the missing parameters
-    were passed as Empty. Schneider expect a future update to fix this, so check the current
-    release notes for the version installed. It compares the function's parameters (found as for
-    GS03) with the "name <= value" entries of the PickAction header line. Error for VBScript
-    (seen); Warning for JavaScript (untested).
+    RC12 was first found in the field: in the 2025 R2 release version a Call Specific Function pick
+    action whose function has a parameter with no value in the pick action configuration does not
+    run at all, with no error; before R2 the missing parameters were passed as Empty. Schneider
+    expect a future update to fix this, so check the current release notes for the version
+    installed. It compares the function's parameters (found as for GS03) with the "name <= value"
+    entries of the PickAction header line. Error for VBScript (seen); Warning for JavaScript
+    (untested).
 
-    RN27: in 2025 R2 a Form.AddListBox holding more items than its rows scrolls horizontally
+    RC06b: in 2025 R2 a Form.AddListBox holding more items than its rows scrolls horizontally
     instead of vertically. List contents are usually filled at run time, so every
     Form.AddListBox is a Review.
 
-    RN28 (from the article): in 2025 R2 App.LogOn, App.LogOff, App.LogOnUser, App.LogOffUser and a
-    Logon through ViewX COM automation (CreateObject("Serck.ViewXApplication")) stop the script,
-    so nothing after the call runs. Warning when code follows the call in the same procedure (an
-    Else branch counts); Info when it is the last statement there, since the code that called the
-    procedure stops too. Form.Logon is not covered: the article does not mention it.
+    RC13: in 2025 R2 App.LogOn, App.LogOff, App.LogOnUser, App.LogOffUser and a Logon through ViewX
+    COM automation (CreateObject("Serck.ViewXApplication")) stop the script, so nothing after the
+    call runs. Warning when code follows the call in the same procedure (an Else branch counts);
+    Info when it is the last statement there, since the code that called the procedure stops too.
+    Form.Logon is not covered: the article does not mention it.
+
+    RC14: in the 2025 R2 release version Server.GetOPCValue cannot read an aggregate (a temporary
+    limitation; check the current release notes). A tag is a dotted name, so Object.Property and
+    Object.Aggregate.Property look alike. RC14a (Warning) is a call whose text names one of the
+    aggregates in the 2025 R2 schema (".Control", ".Historic.", ".ScanParams." ...); RC14b (Info)
+    lists every other GetOPCValue, so tags built at run time can be checked.
+
+    RX10 was found in the field: GetRegistry("Key") returns Null or an empty string when the key has
+    not been set, so converting it (CLng ...) fails. It is an Error when the call is wrapped
+    directly in a conversion function and a Warning otherwise.
 
     Severities: Error (fails or misbehaves in 2025 R2), Warning (likely to misbehave - check),
     Review (behaviour or layout changed - look at it), Info (advisory).
@@ -118,7 +137,7 @@
     _ScriptAnalysis_Actions.csv lists one row per object to edit; _ScriptAnalysis_Instances.csv
     lists the instance copies each one covers. -IncludeInstances scans every file instead.
 
-    The RN06/RN07 COM checks read this machine's registry (64-bit view). Run the analyser on a
+    The RX01/RX02 COM checks read this machine's registry (64-bit view). Run the analyser on a
     machine built like your ViewX clients, or use -SkipProgIdCheck.
 
     Versions: the console, the HTML header and every row of the findings CSV (ExporterVersion,
@@ -160,16 +179,17 @@
     Lowest severity to report: Error, Warning, Review or Info (default).
 
 .PARAMETER IncludeRule
-    Only run these rule IDs (e.g. RN01,RN11,GS01).
+    Only run these rule IDs (e.g. RC01,JS02,GS01). A 1.x rule ID (RN01-RN28) is translated to its
+    2.0.0 ID, with a note.
 
 .PARAMETER ExcludeRule
-    Skip these rule IDs.
+    Skip these rule IDs. A 1.x rule ID (RN01-RN28) is translated to its 2.0.0 ID, with a note.
 
 .PARAMETER IncludeInstances
     Scan instance copies too, instead of only the editable source of each script.
 
 .PARAMETER SkipProgIdCheck
-    Do not look COM ProgIDs up in this machine's registry (RN06/RN07 are then not reported).
+    Do not look COM ProgIDs up in this machine's registry (RX01/RX02 are then not reported).
 
 .PARAMETER NoHtml
     Write the CSV only.
@@ -213,88 +233,134 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AnalyserVersion = '1.4.0'      # see CHANGELOG.md; bump with every released change
+$AnalyserVersion = '2.0.0'      # see CHANGELOG.md; bump with every released change
 $SupportedFormat = 2      # newest exporter FormatVersion this analyser understands
 
 # =============================================================================================
 #  RULES  -  severity, title, fix and source for each rule. Edit severities here.
 # =============================================================================================
 $RN = 'Geo SCADA 2025 R2 Release Notes'
-$KB = 'Geo SCADA Knowledge Base: Adjustments for VBScript in Geo SCADA 2025 R2 (community.se.com; published 2026-10-15, checked 2026-11-03)'
+$KB = 'Geo SCADA Knowledge Base: Adjustments for VBScript in Geo SCADA 2025 R2 (community.se.com; published 2026-10-15, checked 2026-11-04)'
+# Rule IDs (2.0.0 onwards). The 1.x IDs RN01-RN28 are never reused (see $OldRuleIds below):
+#   RCnn  the numbered items of the Resource Centre (Knowledge Base) article; a letter (RC06a, RC06b) when
+#         one item has several checks
+#   JSnn  the article's "Specific JScript Issues" section, in article order
+#   RXnn  other 2025 R2 changes that are not in the article (release notes, field findings)
+#   GSnn  checks on the exporter's metadata (the same IDs as in 1.x)
 $Rules = [ordered]@{
-    RN01 = @{ Severity = 'Error';   Title = '.Value(x) used to set a value'
-              Fix = 'Assign instead: x.Interface.Value = 3.14. The Value property now takes precedence over the Value method, so .Value(x) raises a script error.'; Ref = "$RN p20 '[variable].Value and Similar Methods'" }
-    RN02 = @{ Severity = 'Warning'; Title = 'Return value of a Menu method used'
-              Fix = 'Menu.Init, Menu.AddItem and Menu.Separator now return Null (previously an empty string). Do not use the return value.'; Ref = "$RN p20-21 'Menu Method Return Values'" }
-    RN03 = @{ Severity = 'Warning'; Title = 'Form control used without .Value'
-              Fix = 'Form controls no longer have a default property. Use control.Value (e.g. MsgBox field.Value).'; Ref = "$RN p21 'Form Control Default Properties'" }
-    RN04 = @{ Severity = 'Review';  Title = 'Form.AddListBox row count is now exact'
-              Fix = 'The rows argument is now honoured exactly; reduce it if the list now overlaps buttons or other items. Empty lists show "No Items".'; Ref = "$RN p21-22 'Behavior Changes to Form.AddListBox'" }
-    RN05 = @{ Severity = 'Review';  Title = 'Form.AddQuery row count is now exact'
-              Fix = 'The rows argument is now honoured exactly; reduce it if the list now overlaps buttons or other items. Empty results show "No Query Results".'; Ref = "$RN p22-23 'Behavior Changes to Form.AddQuery'" }
-    RN06 = @{ Severity = 'Error';   Title = 'COM class is 32-bit only'
-              Fix = 'ViewX is now 64-bit and can only create 64-bit (or out-of-process) COM objects. Replace the component with a 64-bit version or remove it.'; Ref = "$RN p16 'ViewX and other Client Applications are now 64-bit'" }
-    RN07 = @{ Severity = 'Warning'; Title = 'COM class not registered on this machine'
-              Fix = 'Check that a 64-bit version of the component is installed on every ViewX client.'; Ref = "$RN p16 'ViewX and other Client Applications are now 64-bit'" }
-    RN08 = @{ Severity = 'Review';  Title = 'COM object created from a computed ProgID'
-              Fix = 'The ProgID is not a literal so it cannot be checked. Confirm the class is available as 64-bit on the ViewX clients.'; Ref = "$RN p16 'ViewX and other Client Applications are now 64-bit'" }
-    RN09 = @{ Severity = 'Error';   Title = 'Clipboard accessed through Internet Explorer'
-              Fix = 'Use the new Clipboard object: Clipboard.GetText(), Clipboard.SetText(text), Clipboard.Clear(), Clipboard.ContainsText().'; Ref = "$RN p23 'New Clipboard Object'" }
-    RN10 = @{ Severity = 'Error';   Title = 'ScriptControl COM object'
-              Fix = 'ScriptControl is 32-bit and not recommended. Replace MsgBox emulation with the Form object (JScript) or Window.Alert/Confirm/Prompt (V8).'; Ref = "$RN p23 'JScript Execution Issues - Calling Script Functions via COM'" }
-    RN11 = @{ Severity = 'Error';   Title = 'Wrong case for a Geo SCADA name'
-              Fix = 'JScript (and V8) are now case-sensitive for Geo SCADA objects, methods and properties. Use the exact name shown.'; Ref = "$RN p24 'JScript Execution Issues - Case Sensitivity'" }
-    RN12 = @{ Severity = 'Error';   Title = 'Number assigned to a Boolean property'
-              Fix = 'Use true / false, e.g. ok.Default = true;'; Ref = "$RN p24 'JScript Execution Issues - Type Conversions'" }
-    RN13 = @{ Severity = 'Warning'; Title = 'JScript pick action passes arguments'
-              Fix = 'JScript9Legacy (default on Windows 11 24H2) cannot pass parameters from a pick action. Remove the parameters, convert the script to JavaScript V8, or (at your own risk) set JScriptReplacement=0.'; Ref = "$RN p24-25 'JScript Execution Issues - Functions with Arguments'" }
-    RN14 = @{ Severity = 'Info';    Title = 'JScript in use'
-              Fix = 'Schneider Electric does not recommend JScript with Geo SCADA. Consider converting to JavaScript V8. On Windows Server 2025, JScript mimic scripts do not run after switching from Design to Run mode.'; Ref = "$RN p25, p58" }
-    RN15 = @{ Severity = 'Error';   Title = 'COM object in JavaScript V8'
-              Fix = 'CreateObject / ActiveXObject are not available in JavaScript V8.'; Ref = "$RN p26-27 'Translation Notes'" }
-    RN16 = @{ Severity = 'Error';   Title = 'MsgBox / InputBox in JavaScript V8'
-              Fix = 'Use Window.Alert, Window.Confirm or Window.Prompt, or the Form object.'; Ref = "$RN p26 'New Window API Methods for JavaScript V8'" }
-    RN17 = @{ Severity = 'Error';   Title = 'LocalTimeToUTC / UTCToLocalTime in JavaScript V8'
-              Fix = 'Not supported in V8. Use the JavaScript Date object local/UTC methods.'; Ref = "$RN p27 'LocalTimeToUTC and UTCToLocalTime'" }
-    RN18 = @{ Severity = 'Review';  Title = 'Form layout in JavaScript V8 uses pixels'
-              Fix = 'Form positions and sizes in V8 are pixel units, not text units. Check the Form.Add... coordinates.'; Ref = "$RN p27 'Translation Notes'" }
-    RN19 = @{ Severity = 'Info';    Title = 'JavaScript V8 script'
-              Fix = 'Runs only on Geo SCADA 2025 R2 or later ViewX / Virtual ViewX clients; not supported by the Original WebX client.'; Ref = "$RN p19, p25-26" }
-    RN20 = @{ Severity = 'Info';    Title = 'Debugger statement'
-              Fix = 'The Microsoft Script Debugger can no longer be used with VBScript / JScript. Remove the statement (a V8 debugger is available in the script editor).'; Ref = "$RN p6, p19 'No VBScript or JScript Debugger'" }
-    RN21 = @{ Severity = 'Warning'; Title = 'GetRegistry without a default value'
-              Fix = 'Pass a default, e.g. CLng(GetRegistry("Key", 0)). A key that has not been set returns Null / an empty string, which fails when converted (CLng, CInt, CDbl ...).'; Ref = '2025 R2 script runtime (field experience; not in the release notes)' }
-    RN22 = @{ Severity = 'Error';   Title = 'VBScript name clashes with a .NET object member'
-              Fix = 'Rename the variable (e.g. toString -> lastSite), or at least Dim it in the procedure. The 2025 R2 VBScript runtime resolves an undeclared ToString, GetType, GetHashCode or Equals to the .NET member, so assigning it raises "The object has no suitable property or field named ''ToString''".'; Ref = "$KB 'Using .Net reserved words toString, GetType, Equals and GetHashCode' (first found in the field)" }
-    RN23 = @{ Severity = 'Warning'; Title = 'Database object used as a value (default property)'
-              Fix = 'Name the property: CStr(obj.Id), MsgBox obj.FullName. A database object variable (Server.FindObject / LookupObject / ThisObject) no longer has a default property, so CStr(obj) no longer gives the object Id.'; Ref = "$KB 'Object Default Properties'" }
-    RN24 = @{ Severity = 'Warning'; Title = 'Object not found tested without Is Nothing'
-              Fix = 'Use: If obj Is Nothing Then. Server.FindObject / LookupObject return Nothing when the object is not found, so IsNull(obj), IsEmpty(obj) and obj = Null are never true and IsObject(obj) is always true. Not new in 2025 R2: the test never worked, so the not-found case fails later with "Object required".'; Ref = "$KB 'Server.LookupObject returns Nothing if the object is not found, not Null'" }
-    RN25 = @{ Severity = 'Warning'; Title = 'Date stored in or read from the registry without conversion'
-              Fix = 'Convert explicitly: SetRegistry "Key", CLng(Int(CDbl(dateValue))) to store it as a Long, and CDate(GetRegistry("Key", 0)) when reading it back. Dates and numbers are no longer converted implicitly.'; Ref = "$KB 'No implicit date/time to number conversions or vice versa'" }
-    RN26 = @{ Severity = 'Error';   Title = 'Pick action leaves function parameters without a value'
-              Fix = 'Give every parameter a value in the pick action configuration (an empty string '''' or 0 if it is not used), or remove the unused parameters from the function. In the 2025 R2 release version (88.9742.1) the function does not run at all - with no error message - when any parameter has no value; before R2 the missing ones were passed as Empty. Schneider expect a future update to fix this, so check the current release notes for the version you have installed. Giving every parameter a value works in all versions.'; Ref = "$KB 'You need to provide all pick action parameters or the script will not run' (first found in the field)" }
-    RN27 = @{ Severity = 'Review';  Title = 'List box scrolls horizontally when it has more items than rows'
-              Fix = 'Check how each list box scrolls when it holds more items than its rows: in 2025 R2 it shows a horizontal scroll bar instead of the vertical one shown before. The content is usually dynamic, so every Form.AddListBox is listed. If the horizontal scrolling is a problem, make the list tall enough for its items (the rows argument or ListBox.Rows), or limit what it holds.'; Ref = '' }
-    RN28 = @{ Severity = 'Warning'; Title = 'Log on / log off stops the script'
-              Fix = 'In 2025 R2 a log on or log off stops the script: App.LogOn, App.LogOff, App.LogOnUser, App.LogOffUser, and a Logon through ViewX COM automation (CreateObject("Serck.ViewXApplication") ... .Logon). For security, ViewX cannot be sure the script would keep the same access to the mimic, libraries and objects, so nothing after the call runs - including the rest of any procedure that called this one. Do everything else first and make the log on or log off the last thing the script does, or move the follow-on work to its own pick action. Warning when code follows the call in the same procedure (an Else branch counts as code); Info when the call is already the last statement there.'; Ref = "$KB 'App.LogOn/Off and App.LogOnUser/OffUser and COM .LogOn will stop execution'" }
-    GS01 = @{ Severity = 'Error';   Title = 'Linked script library does not exist'
-              Fix = 'Remove the link or point it at the library''s current location.'; Ref = 'Exporter header LibraryMissing' }
-    GS02 = @{ Severity = 'Error';   Title = 'Function pick action but the mimic has no script'
-              Fix = 'Add the function (or a link to a library defining it), or remove the pick action.'; Ref = 'Exporter header PickAction' }
-    GS03 = @{ Severity = 'Error';   Title = 'Pick action function not defined'
-              Fix = 'Define the function in the mimic script or a linked library, or correct the pick action.'; Ref = 'Exporter header PickAction' }
-    GS04 = @{ Severity = 'Error';   Title = 'Pick action function name differs in case'
-              Fix = 'JScript / V8 function names are case-sensitive. Match the pick action to the function name exactly.'; Ref = 'Exporter header PickAction' }
-    GS05 = @{ Severity = 'Info';    Title = 'Pick action function could not be verified'
-              Fix = 'A linked library is not in this export (out of scope?), so the function could not be checked.'; Ref = 'Exporter header PickAction' }
-    GS06 = @{ Severity = 'Error';   Title = 'Linked library is in a different language'
-              Fix = 'A mimic and the libraries it links must use the same language.'; Ref = 'Exporter headers Language / Library' }
-    GS07 = @{ Severity = 'Warning'; Title = 'Script syntax does not match its language'
-              Fix = 'The code looks like a different language from the one set on the object. Correct the language setting or the code.'; Ref = 'Script body' }
-    GS08 = @{ Severity = 'Info';    Title = 'Script library not linked by any mimic'
-              Fix = 'Possibly unused (only mimics are counted; libraries can also be used by other means). Consider removing it.'; Ref = 'Exporter header ReferencedByMimics' }
+    RC01  = @{ Severity = 'Error';   Title = '.Value(x) used to set a value'
+               Fix = 'Assign instead: x.Interface.Value = 3.14. The Value property now takes precedence over the Value method, so .Value(x) raises a script error.'; Ref = "$KB #1 '[variable].Value is not a Method, it is a Property'; $RN p20" }
+    RC02  = @{ Severity = 'Warning'; Title = 'Return value of a Menu method used'
+               Fix = 'Menu.Init, Menu.AddItem and Menu.Separator now return Null (previously an empty string). Do not use the return value.'; Ref = "$KB #2 'Menu Method Return Values'; $RN p20-21" }
+    RC03  = @{ Severity = 'Warning'; Title = 'Form control used without .Value'
+               Fix = 'Form controls no longer have a default property. Use control.Value (e.g. MsgBox field.Value).'; Ref = "$KB #3 'Form Control Default Properties'; $RN p21" }
+    RC04  = @{ Severity = 'Warning'; Title = 'Database object used as a value (default property)'
+               Fix = 'Name the property: CStr(obj.Id), MsgBox obj.FullName. A database object variable (Server.FindObject / LookupObject / ThisObject) no longer has a default property, so CStr(obj) no longer gives the object Id.'; Ref = "$KB #4 'Object Default Properties'" }
+    RC06a = @{ Severity = 'Review';  Title = 'Form.AddListBox row count is now exact'
+               Fix = 'The rows argument is now honoured exactly; reduce it if the list now overlaps buttons or other items. Empty lists show "No Items".'; Ref = "$KB #6 'Behavior Changes to Form.AddListBox'; $RN p21-22" }
+    RC06b = @{ Severity = 'Review';  Title = 'List box scrolls horizontally when it has more items than rows'
+               Fix = 'Check how each list box scrolls when it holds more items than its rows: in 2025 R2 it shows a horizontal scroll bar instead of the vertical one shown before. The content is usually dynamic, so every Form.AddListBox is listed. If the horizontal scrolling is a problem, make the list tall enough for its items (the rows argument or ListBox.Rows), or limit what it holds.'; Ref = "$KB #6 'Behavior Changes to Form.AddListBox' (first found in the field)" }
+    RC07  = @{ Severity = 'Review';  Title = 'Form.AddQuery row count is now exact'
+               Fix = 'The rows argument is now honoured exactly; reduce it if the list now overlaps buttons or other items. Empty results show "No Query Results".'; Ref = "$KB #7 'Behavior Changes to Form.AddQuery'; $RN p22-23" }
+    RC08  = @{ Severity = 'Error';   Title = 'Clipboard accessed through Internet Explorer'
+               Fix = 'Use the new Clipboard object: Clipboard.GetText(), Clipboard.SetText(text), Clipboard.Clear(), Clipboard.ContainsText().'; Ref = "$KB #8 'New Clipboard Object'; $RN p23" }
+    RC09  = @{ Severity = 'Warning'; Title = 'Object not found tested without Is Nothing'
+               Fix = 'Use: If obj Is Nothing Then. Server.FindObject / LookupObject return Nothing when the object is not found, so IsNull(obj), IsEmpty(obj) and obj = Null are never true and IsObject(obj) is always true. Not new in 2025 R2: the test never worked, so the not-found case fails later with "Object required".'; Ref = "$KB #9 'Server.LookupObject returns Nothing if the object is not found, not Null'" }
+    RC10  = @{ Severity = 'Error';   Title = 'VBScript name clashes with a .NET object member'
+               Fix = 'Rename the variable (e.g. toString -> lastSite), or at least Dim it in the procedure. The 2025 R2 VBScript runtime resolves an undeclared ToString, GetType, GetHashCode or Equals to the .NET member, so assigning it raises "The object has no suitable property or field named ''ToString''".'; Ref = "$KB #10 'Using .Net reserved words toString, GetType, Equals and GetHashCode' (first found in the field)" }
+    RC11  = @{ Severity = 'Warning'; Title = 'Date stored in or read from the registry without conversion'
+               Fix = 'Convert explicitly: SetRegistry "Key", CLng(Int(CDbl(dateValue))) to store it as a Long, and CDate(GetRegistry("Key", 0)) when reading it back. Dates and numbers are no longer converted implicitly.'; Ref = "$KB #11 'No implicit date/time to number conversions or vice versa'" }
+    RC12  = @{ Severity = 'Error';   Title = 'Pick action leaves function parameters without a value'
+               Fix = 'Give every parameter a value in the pick action configuration (an empty string '''' or 0 if it is not used), or remove the unused parameters from the function. In the 2025 R2 release version (88.9742.1) the function does not run at all - with no error message - when any parameter has no value; before R2 the missing ones were passed as Empty. Schneider expect a future update to fix this, so check the current release notes for the version you have installed. Giving every parameter a value works in all versions.'; Ref = "$KB #12 'You need to provide all pick action parameters or the script will not run' (first found in the field)" }
+    RC13  = @{ Severity = 'Warning'; Title = 'Log on / log off stops the script'
+               Fix = 'In 2025 R2 a log on or log off stops the script: App.LogOn, App.LogOff, App.LogOnUser, App.LogOffUser, and a Logon through ViewX COM automation (CreateObject("Serck.ViewXApplication") ... .Logon). For security, ViewX cannot be sure the script would keep the same access to the mimic, libraries and objects, so nothing after the call runs - including the rest of any procedure that called this one. Do everything else first and make the log on or log off the last thing the script does, or move the follow-on work to its own pick action. Warning when code follows the call in the same procedure (an Else branch counts as code); Info when the call is already the last statement there.'; Ref = "$KB #13 'App.LogOn/Off and App.LogOnUser/OffUser and COM .LogOn will stop execution'" }
+    RC14a = @{ Severity = 'Warning'; Title = 'GetOPCValue reads an aggregate'
+               Fix = 'In the 2025 R2 release version (88.9742.1) Server.GetOPCValue cannot read an aggregate, or a property inside one (for example myPoint & ".Control" or myPoint & ".Control.ControlMaximum"): it raises an error. Schneider describe this as a temporary limitation that a future update will fix (errors will still be raised, with different codes), so check the current release notes for the version you have installed. Reading it through the object works in all versions: Server.FindObject(name).Interface.Control.ControlMaximum, with error handling for objects that do not have the aggregate. The aggregate names come from the 2025 R2 database schema, so a group or point that happens to share an aggregate''s name (such as a group called Network) is reported too.'; Ref = "$KB #14 'The Server.GetOPCValue method cannot read aggregates'" }
+    RC14b = @{ Severity = 'Info';    Title = 'GetOPCValue tag not checked for aggregates'
+               Fix = 'A GetOPCValue tag is a dotted name such as Object.Property or Object.Aggregate.Property, and the script alone cannot always show which. If it reads through an aggregate, it fails in the 2025 R2 release version (see RC14a). Calls whose text names a known aggregate are RC14a; this lists every other call, including tags built at run time, so they can be checked. Hide RC14b with the rule filter once reviewed.'; Ref = "$KB #14 'The Server.GetOPCValue method cannot read aggregates'" }
+    JS01  = @{ Severity = 'Error';   Title = 'ScriptControl COM object'
+               Fix = 'ScriptControl is 32-bit and not recommended. Replace MsgBox emulation with the Form object (JScript) or Window.Alert/Confirm/Prompt (V8). Listed in the JScript section of the article, but checked in VBScript too.'; Ref = "$KB 'Specific JScript Issues - Calling Script Functions via COM'; $RN p23" }
+    JS02  = @{ Severity = 'Error';   Title = 'Wrong case for a Geo SCADA name'
+               Fix = 'JScript (and V8) are now case-sensitive for Geo SCADA objects, methods and properties. Use the exact name shown.'; Ref = "$KB 'Specific JScript Issues - Case Sensitivity'; $RN p24" }
+    JS03  = @{ Severity = 'Error';   Title = 'Number assigned to a Boolean property'
+               Fix = 'Use true / false, e.g. ok.Default = true;'; Ref = "$KB 'Specific JScript Issues - Type Conversions'; $RN p24" }
+    JS04  = @{ Severity = 'Warning'; Title = 'JScript pick action passes arguments'
+               Fix = 'JScript9Legacy (default on Windows 11 24H2) cannot pass parameters from a pick action. Remove the parameters, convert the script to JavaScript V8, or (at your own risk) set JScriptReplacement=0.'; Ref = "$KB 'Specific JScript Issues - Functions with Arguments'; $RN p24-25" }
+    JS05  = @{ Severity = 'Info';    Title = 'JScript in use'
+               Fix = 'Schneider Electric does not recommend JScript with Geo SCADA. Consider converting to JavaScript V8. On Windows Server 2025, JScript mimic scripts do not run after switching from Design to Run mode.'; Ref = "$KB 'Specific JScript Issues'; $RN p25, p58" }
+    RX01  = @{ Severity = 'Error';   Title = 'COM class is 32-bit only'
+               Fix = 'ViewX is now 64-bit and can only create 64-bit (or out-of-process) COM objects. Replace the component with a 64-bit version or remove it.'; Ref = "$RN p16 'ViewX and other Client Applications are now 64-bit'" }
+    RX02  = @{ Severity = 'Warning'; Title = 'COM class not registered on this machine'
+               Fix = 'Check that a 64-bit version of the component is installed on every ViewX client.'; Ref = "$RN p16 'ViewX and other Client Applications are now 64-bit'" }
+    RX03  = @{ Severity = 'Review';  Title = 'COM object created from a computed ProgID'
+               Fix = 'The ProgID is not a literal so it cannot be checked. Confirm the class is available as 64-bit on the ViewX clients.'; Ref = "$RN p16 'ViewX and other Client Applications are now 64-bit'" }
+    RX04  = @{ Severity = 'Info';    Title = 'Debugger statement'
+               Fix = 'The Microsoft Script Debugger can no longer be used with VBScript / JScript. Remove the statement (a V8 debugger is available in the script editor).'; Ref = "$RN p6, p19 'No VBScript or JScript Debugger'" }
+    RX05  = @{ Severity = 'Error';   Title = 'COM object in JavaScript V8'
+               Fix = 'CreateObject / ActiveXObject are not available in JavaScript V8.'; Ref = "$RN p26-27 'Translation Notes'" }
+    RX06  = @{ Severity = 'Error';   Title = 'MsgBox / InputBox in JavaScript V8'
+               Fix = 'Use Window.Alert, Window.Confirm or Window.Prompt, or the Form object.'; Ref = "$RN p26 'New Window API Methods for JavaScript V8'" }
+    RX07  = @{ Severity = 'Error';   Title = 'LocalTimeToUTC / UTCToLocalTime in JavaScript V8'
+               Fix = 'Not supported in V8. Use the JavaScript Date object local/UTC methods.'; Ref = "$RN p27 'LocalTimeToUTC and UTCToLocalTime'" }
+    RX08  = @{ Severity = 'Review';  Title = 'Form layout in JavaScript V8 uses pixels'
+               Fix = 'Form positions and sizes in V8 are pixel units, not text units. Check the Form.Add... coordinates.'; Ref = "$RN p27 'Translation Notes'" }
+    RX09  = @{ Severity = 'Info';    Title = 'JavaScript V8 script'
+               Fix = 'Runs only on Geo SCADA 2025 R2 or later ViewX / Virtual ViewX clients; not supported by the Original WebX client.'; Ref = "$RN p19, p25-26" }
+    RX10  = @{ Severity = 'Warning'; Title = 'GetRegistry without a default value'
+               Fix = 'Pass a default, e.g. CLng(GetRegistry("Key", 0)). A key that has not been set returns Null / an empty string, which fails when converted (CLng, CInt, CDbl ...).'; Ref = '2025 R2 script runtime (field experience; not in the release notes or the article)' }
+    GS01  = @{ Severity = 'Error';   Title = 'Linked script library does not exist'
+               Fix = 'Remove the link or point it at the library''s current location.'; Ref = 'Exporter header LibraryMissing' }
+    GS02  = @{ Severity = 'Error';   Title = 'Function pick action but the mimic has no script'
+               Fix = 'Add the function (or a link to a library defining it), or remove the pick action.'; Ref = 'Exporter header PickAction' }
+    GS03  = @{ Severity = 'Error';   Title = 'Pick action function not defined'
+               Fix = 'Define the function in the mimic script or a linked library, or correct the pick action.'; Ref = 'Exporter header PickAction' }
+    GS04  = @{ Severity = 'Error';   Title = 'Pick action function name differs in case'
+               Fix = 'JScript / V8 function names are case-sensitive. Match the pick action to the function name exactly.'; Ref = 'Exporter header PickAction' }
+    GS05  = @{ Severity = 'Info';    Title = 'Pick action function could not be verified'
+               Fix = 'A linked library is not in this export (out of scope?), so the function could not be checked.'; Ref = 'Exporter header PickAction' }
+    GS06  = @{ Severity = 'Error';   Title = 'Linked library is in a different language'
+               Fix = 'A mimic and the libraries it links must use the same language.'; Ref = 'Exporter headers Language / Library' }
+    GS07  = @{ Severity = 'Warning'; Title = 'Script syntax does not match its language'
+               Fix = 'The code looks like a different language from the one set on the object. Correct the language setting or the code.'; Ref = 'Script body' }
+    GS08  = @{ Severity = 'Info';    Title = 'Script library not linked by any mimic'
+               Fix = 'Possibly unused (only mimics are counted; libraries can also be used by other means). Consider removing it.'; Ref = 'Exporter header ReferencedByMimics' }
 }
+# Analyser 1.x rule ID -> 2.0.0 rule ID (GS IDs did not change). -IncludeRule / -ExcludeRule translate these,
+# and the HTML report shows them and carries 1.x rule-filter choices over. RC14a / RC14b are new in 2.0.0.
+$OldRuleIds = [ordered]@{
+    RN01 = 'RC01'; RN02 = 'RC02'; RN03 = 'RC03'; RN04 = 'RC06a'; RN05 = 'RC07'; RN06 = 'RX01'; RN07 = 'RX02'
+    RN08 = 'RX03'; RN09 = 'RC08'; RN10 = 'JS01'; RN11 = 'JS02'; RN12 = 'JS03'; RN13 = 'JS04'; RN14 = 'JS05'
+    RN15 = 'RX05'; RN16 = 'RX06'; RN17 = 'RX07'; RN18 = 'RX08'; RN19 = 'RX09'; RN20 = 'RX04'; RN21 = 'RX10'
+    RN22 = 'RC10'; RN23 = 'RC04'; RN24 = 'RC09'; RN25 = 'RC11'; RN26 = 'RC12'; RN27 = 'RC06b'; RN28 = 'RC13'
+}
+$OldRuleIdOf = @{}; foreach ($o in $OldRuleIds.Keys) { $OldRuleIdOf[$OldRuleIds[$o]] = $o }
+
+# RC14a: aggregate names in the Geo SCADA 2025 R2 (88.9742.1) database schema - every aggregate of every class,
+# with the drivers installed on the test system. $AggregatesAlsoProperties are property names too, so they count
+# only when another name follows them (".Shared.X", not a final ".Shared").
+$AggregateNames = @(
+    'AlarmRedirection', 'AlarmSummary', 'BoardType', 'Config', 'ConfigDownloadLogs', 'ConfigReports',
+    'ConfigurationChanges', 'ConnectionPoint', 'ConnectionPoint2', 'ContactConfig', 'Control', 'ControlChecks',
+    'CurrentProfileHistoric', 'DictionaryAggr', 'DNP3Aggregate', 'DNP3Config', 'DNP3MasterConfig',
+    'DNP3SlaveConfig', 'EthernetPorts', 'EventJournal', 'Exception', 'Forecast1', 'Forecast2', 'Forecast3',
+    'Forecast4', 'Forecast5', 'Forecast6', 'Forecast7', 'Forecast8', 'GISAggr', 'GISLocation',
+    'GISLocationSource', 'GuestUser', 'High1ProfileHistoric', 'High2ProfileHistoric', 'High3ProfileHistoric',
+    'High4ProfileHistoric', 'HighProfileHistoric', 'HisAlarmSummary', 'HisAnnotation', 'HisConfigChanges',
+    'HisJournal', 'HisModified', 'HisRaw', 'HisSuppression', 'Historian', 'Historic', 'History',
+    'IEC60870Aggregate', 'IEC60870Config', 'IOPointMapping', 'IOPointMapping2', 'Low1ProfileHistoric',
+    'Low2ProfileHistoric', 'Low3ProfileHistoric', 'Low4ProfileHistoric', 'MappingAggregate', 'MapSourceType',
+    'MBPointMap', 'ModbusAggregate', 'ModbusConfig', 'MultiMaster', 'Network', 'NetworkInfo', 'NetworkInfo2',
+    'NonWorkingRedirections', 'PerformanceStats', 'PSTN', 'PSTNExtGSM', 'RegionType', 'Remote', 'Reports',
+    'Sampler', 'SBA1', 'SBA2', 'SBA3', 'SBB1', 'SBB2', 'SBB3', 'ScanParams', 'Security', 'SEEWS', 'SerialConfig',
+    'SerialPort1', 'SerialPort2', 'SerialPort3', 'SerialPort4', 'SerialPort5', 'Shared', 'SMS', 'Standby0',
+    'Standby1', 'Standby2', 'Standby3', 'Standby4', 'StatusType', 'TCPIP', 'Topic', 'UserMethods', 'ViewXConfig',
+    'WebServer', 'WebXConfig', 'Working1Redirections', 'Working2Redirections', 'Working3Redirections',
+    'Working4Redirections', 'Working5Redirections', 'Working6Redirections', 'Working7Redirections', 'X29')
+$AggregatesAlsoProperties = @('AlarmSummary', 'PSTN', 'Shared')
+$script:AggregateSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+foreach ($a in $AggregateNames) { [void]$script:AggregateSet.Add($a) }
+$script:AggregatePropertySet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+foreach ($a in $AggregatesAlsoProperties) { [void]$script:AggregatePropertySet.Add($a) }
 $SeverityRank = @{ Error = 0; Warning = 1; Review = 2; Info = 3 }
 # ======================================  end of rules  ======================================
 
@@ -860,7 +926,7 @@ function Get-DbObjectSource($Code, $Match) {
     return "Server.$call"
 }
 
-# RN28: does code follow the call at $Pos (whose name ends at $End) in the same procedure? Deliberately
+# RC13: does code follow the call at $Pos (whose name ends at $End) in the same procedure? Deliberately
 # conservative: only whitespace, block closers (End If / Next / Loop ..., '}' in JS) and Exit / return /
 # break are not counted, so an Else branch after the call counts as code. Returns @{ Follows; Where }.
 function Test-CodeFollows($Ctx, [int]$Pos, [int]$End, $VbsProcs) {
@@ -900,25 +966,25 @@ function Invoke-BodyRules($Ctx) {
     $opt = [System.Text.RegularExpressions.RegexOptions]$ci
     $isV8 = $lang -eq 'JavaScriptV8'
 
-    # RN01 .Value(x) used as a statement (a set). Reads such as y = x.Interface.Value(0) still work.
+    # RC01 .Value(x) used as a statement (a set). Reads such as y = x.Interface.Value(0) still work.
     foreach ($m in [regex]::Matches($code, '\.\s*Value\s*\(', $opt)) {
         $open = $m.Index + $m.Length - 1
         $close = [GeoScadaScriptScan]::MatchParen($code, $open)
         if ($close -lt 0 -or [GeoScadaScriptScan]::CountArgs($code, $open, $close) -ne 1) { continue }
         if (-not (Test-StatementCall $code $m.Index $close $isJs)) { continue }
         $before = $code.Substring([Math]::Max(0, $m.Index - 30), [Math]::Min(30, $m.Index))
-        if ($before -match '(?i)Interface\s*$') { Add-BodyFinding 'RN01' $Ctx $m.Index 'Interface.Value(...) with one argument' }
-        else { Add-BodyFinding 'RN01' $Ctx $m.Index '.Value(...) with one argument - an error if this object''s Value is a property' 'Warning' }
+        if ($before -match '(?i)Interface\s*$') { Add-BodyFinding 'RC01' $Ctx $m.Index 'Interface.Value(...) with one argument' }
+        else { Add-BodyFinding 'RC01' $Ctx $m.Index '.Value(...) with one argument - an error if this object''s Value is a property' 'Warning' }
     }
 
-    # RN02 Menu return value used
+    # RC02 Menu return value used
     foreach ($m in [regex]::Matches($code, '(?:[=(,&+]|\bIf[ \t]|\breturn[ \t])[ \t]*Menu[ \t]*\.[ \t]*(Init|AddItem|Separator|AddSeparator)\b', $opt)) {
         if ($code.Substring([Math]::Max(0, $m.Index - 1), 2) -match '[=!<>]=') { continue }   # ==, !=, <=, >= comparisons are uses too, but keep simple
-        Add-BodyFinding 'RN02' $Ctx $m.Index "Return value of Menu.$($m.Groups[1].Value) used"
+        Add-BodyFinding 'RC02' $Ctx $m.Index "Return value of Menu.$($m.Groups[1].Value) used"
     }
 
-    # RN03 Form control default property (VBScript)
-    # RN23 (database objects) works the same way: every bare use of the variable reads its default property.
+    # RC03 Form control default property (VBScript)
+    # RC04 (database objects) works the same way: every bare use of the variable reads its default property.
     $vbsProcs = @(); $formVars = @(); $usesRegistry = $false; $hasObjVars = $false
     if (-not $isJs) {
         $hasObjVars = $code -match '(?i)\bSet\s+\w+\s*=\s*(Form|Server)\s*\.'
@@ -930,24 +996,24 @@ function Invoke-BodyRules($Ctx) {
             foreach ($i in (Find-ValueUses $code $v)) {
                 $ln = Get-LineOf $Ctx $i
                 if ($seen.ContainsKey($ln)) { continue }; $seen[$ln] = 1
-                Add-BodyFinding 'RN03' $Ctx $i "'$($v.Name)' ($($v.What)) used as a value; use $($v.Name).Value"
+                Add-BodyFinding 'RC03' $Ctx $i "'$($v.Name)' ($($v.What)) used as a value; use $($v.Name).Value"
             }
         }
     }
 
-    # RN23 / RN24 database object variables (VBScript)
+    # RC04 / RC09 database object variables (VBScript)
     if (-not $isJs -and $hasObjVars) {
         $dbVars =Get-SetVariables $code '(?i)\bSet\s+(\w+)\s*=\s*Server\s*\.\s*(FindObject|LookupObject|ThisObject)\b' $vbsProcs { param($m) Get-DbObjectSource $code $m }
-        # RN23: used as a value - no default property any more (IsNull / IsEmpty / = Null are RN24's)
+        # RC04: used as a value - no default property any more (IsNull / IsEmpty / = Null are RC09's)
         $seen = @{}
         foreach ($v in $dbVars) {
             foreach ($i in (Find-ValueUses $code $v -Exclude 'IsNull', 'IsEmpty' -SkipNullCompare)) {
                 $ln = Get-LineOf $Ctx $i
                 if ($seen.ContainsKey($ln)) { continue }; $seen[$ln] = 1
-                Add-BodyFinding 'RN23' $Ctx $i "'$($v.Name)' ($($v.What)) used as a value; name the property, e.g. $($v.Name).Id or $($v.Name).FullName"
+                Add-BodyFinding 'RC04' $Ctx $i "'$($v.Name)' ($($v.What)) used as a value; name the property, e.g. $($v.Name).Id or $($v.Name).FullName"
             }
         }
-        # RN24: "not found" tested with IsNull / IsEmpty / = Null / IsObject. FindObject and LookupObject return
+        # RC09: "not found" tested with IsNull / IsEmpty / = Null / IsObject. FindObject and LookupObject return
         # Nothing, so these tests never see it. Skipped when the script or its libraries define their own function.
         $own = @{}
         foreach ($fn in 'isnull', 'isempty', 'isobject') { if ($code -match "(?im)^[ \t]*(?:(?:Public|Private)\s+)?Function\s+$fn\b") { $own[$fn] = 1 } }
@@ -962,12 +1028,12 @@ function Invoke-BodyRules($Ctx) {
                 if ($fn -and $own.ContainsKey($fn.ToLowerInvariant())) { continue }
                 $test = if ($fn) { "$fn($($v.Name))" } else { "$($v.Name) = Null" }
                 $why = if ($fn -ieq 'IsObject') { 'IsObject is True for Nothing too' } else { "$($v.What) returns Nothing, not Null or Empty" }
-                Add-BodyFinding 'RN24' $Ctx $m.Index "$test used to test whether the object was found - $why. Use: If $($v.Name) Is Nothing Then"
+                Add-BodyFinding 'RC09' $Ctx $m.Index "$test used to test whether the object was found - $why. Use: If $($v.Name) Is Nothing Then"
             }
         }
     }
 
-    # RN25 implicit date <-> number conversion through the registry (VBScript): SetRegistry with a date value,
+    # RC11 implicit date <-> number conversion through the registry (VBScript): SetRegistry with a date value,
     # GetRegistry read straight into a date function or a date-time control. Dates: Now / Date / Time, the date
     # functions, a Form.AddDateTime control's .Value, and variables assigned from those in the same procedure.
     if (-not $isJs -and $usesRegistry) {
@@ -1002,31 +1068,31 @@ function Invoke-BodyRules($Ctx) {
             $proc = $vbsProcs | Where-Object { $m.Index -ge $_.Start -and $m.Index -le $_.End } | Select-Object -First 1
             $scope = if ($proc) { $proc.Start } else { 0 }
             if ($value -match $isDate -or ($value -match '^(\w+)$' -and $dateVars.ContainsKey("$($Matches[1].ToLowerInvariant())|$scope"))) {
-                Add-BodyFinding 'RN25' $Ctx $m.Index "SetRegistry with a date value ($value) - store CLng(Int(CDbl($value))) and read it back with CDate"
+                Add-BodyFinding 'RC11' $Ctx $m.Index "SetRegistry with a date value ($value) - store CLng(Int(CDbl($value))) and read it back with CDate"
             }
         }
         foreach ($m in [regex]::Matches($code, '(?i)\b(DateAdd|DateDiff|DatePart|FormatDateTime|Year|Month|Day|Hour|Minute|Second|Weekday)\s*\(([^()]*\([^()]*\))*[^()]*?(?<![\w.])GetRegistry\b')) {
-            Add-BodyFinding 'RN25' $Ctx $m.Index "GetRegistry value passed to $($m.Groups[1].Value) - convert it with CDate(GetRegistry(...)) first"
+            Add-BodyFinding 'RC11' $Ctx $m.Index "GetRegistry value passed to $($m.Groups[1].Value) - convert it with CDate(GetRegistry(...)) first"
         }
         if ($dtVars.Count) {
             foreach ($v in $dtVars) {
                 foreach ($m in [regex]::new("(?i)(?<![\w.])$([regex]::Escape($v.Name))\s*\.\s*Value\s*=\s*GetRegistry\b").Matches($code, $v.From)) {
                     if ($m.Index -ge $v.To) { break }
-                    Add-BodyFinding 'RN25' $Ctx $m.Index "GetRegistry value written to a date-time control ($($v.Name).Value) - convert it with CDate first"
+                    Add-BodyFinding 'RC11' $Ctx $m.Index "GetRegistry value written to a date-time control ($($v.Name).Value) - convert it with CDate first"
                 }
             }
         }
     }
 
-    # RN04 / RN05 list and query row counts; RN27 list box scrolling (every list box: its content is
+    # RC06a / RC07 list and query row counts; RC06b list box scrolling (every list box: its content is
     # usually filled at run time, so whether it holds more items than rows cannot be told from the script)
     foreach ($m in [regex]::Matches($code, '\bForm\s*\.\s*(AddListBox|AddQuery)\b', $opt)) {
-        $rule = if ($m.Groups[1].Value -ieq 'AddListBox') { 'RN04' } else { 'RN05' }
+        $rule = if ($m.Groups[1].Value -ieq 'AddListBox') { 'RC06a' } else { 'RC07' }
         Add-BodyFinding $rule $Ctx $m.Index "Form.$($m.Groups[1].Value)"
-        if ($rule -eq 'RN04') { Add-BodyFinding 'RN27' $Ctx $m.Index 'Form.AddListBox - check scrolling when it holds more items than rows' }
+        if ($rule -eq 'RC06a') { Add-BodyFinding 'RC06b' $Ctx $m.Index 'Form.AddListBox - check scrolling when it holds more items than rows' }
     }
 
-    # RN06-RN10, RN15 COM objects. Only the built-in CreateObject / ActiveXObject: a member call such as
+    # RX01-RX03, RC08, JS01, RX05 COM objects. Only the built-in CreateObject / ActiveXObject: a member call such as
     # objServer.CreateObject(class, parent) is a Geo SCADA method that creates a database item, not COM.
     $literal = @{}
     $comPattern = if ($isJs) { '(?<!\.\s*)\b(?:new\s+)?(ActiveXObject|CreateObject)\s*\(\s*(["''])(.*?)\2' } else { '(?i)(?<!\.\s*)\b(CreateObject)\s*\(\s*(")(.*?)"' }
@@ -1037,22 +1103,22 @@ function Invoke-BodyRules($Ctx) {
         $literal[$m.Index] = 1
         $progId = $m.Groups[3].Value.Trim()
         $fn = $m.Groups[1].Value
-        if ($isV8) { Add-BodyFinding 'RN15' $Ctx $m.Index "$fn(""$progId"")"; continue }
-        if ($progId -match '(?i)^InternetExplorer\.Application') { Add-BodyFinding 'RN09' $Ctx $m.Index "$fn(""$progId"")"; continue }
-        if ($progId -match '(?i)ScriptControl') { Add-BodyFinding 'RN10' $Ctx $m.Index "$fn(""$progId"")"; continue }
+        if ($isV8) { Add-BodyFinding 'RX05' $Ctx $m.Index "$fn(""$progId"")"; continue }
+        if ($progId -match '(?i)^InternetExplorer\.Application') { Add-BodyFinding 'RC08' $Ctx $m.Index "$fn(""$progId"")"; continue }
+        if ($progId -match '(?i)ScriptControl') { Add-BodyFinding 'JS01' $Ctx $m.Index "$fn(""$progId"")"; continue }
         if ($SkipProgIdCheck) { continue }
         switch (Get-ProgIdStatus $progId) {
-            '32Only'        { Add-BodyFinding 'RN06' $Ctx $m.Index "'$progId' is registered only as a 32-bit in-process server on $env:COMPUTERNAME" }
-            'NotRegistered' { Add-BodyFinding 'RN07' $Ctx $m.Index "'$progId' is not registered on $env:COMPUTERNAME" }
+            '32Only'        { Add-BodyFinding 'RX01' $Ctx $m.Index "'$progId' is registered only as a 32-bit in-process server on $env:COMPUTERNAME" }
+            'NotRegistered' { Add-BodyFinding 'RX02' $Ctx $m.Index "'$progId' is not registered on $env:COMPUTERNAME" }
         }
     }
     foreach ($m in [regex]::Matches($code, '(?<!\.\s*)\b(?:new\s+)?(ActiveXObject|CreateObject)\s*\(', $(if ($isJs) { 'None' } else { 'IgnoreCase' }))) {
         if ($literal.ContainsKey($m.Index)) { continue }
-        if ($isV8) { Add-BodyFinding 'RN15' $Ctx $m.Index "$($m.Groups[1].Value)(...)" } else { Add-BodyFinding 'RN08' $Ctx $m.Index "$($m.Groups[1].Value) with a computed ProgID" }
+        if ($isV8) { Add-BodyFinding 'RX05' $Ctx $m.Index "$($m.Groups[1].Value)(...)" } else { Add-BodyFinding 'RX03' $Ctx $m.Index "$($m.Groups[1].Value) with a computed ProgID" }
     }
-    if ($isJs) { foreach ($m in [regex]::Matches($code, '\bclipboardData\b')) { Add-BodyFinding 'RN09' $Ctx $m.Index 'clipboardData' } }
+    if ($isJs) { foreach ($m in [regex]::Matches($code, '\bclipboardData\b')) { Add-BodyFinding 'RC08' $Ctx $m.Index 'clipboardData' } }
 
-    # RN11 case / RN12 Boolean types (JScript, JScript9, V8)
+    # JS02 case / JS03 Boolean types (JScript, JScript9, V8)
     if ($isJs) {
         $declared = New-Object 'System.Collections.Generic.HashSet[string]'
         foreach ($m in [regex]::Matches($code, '\b(?:var|let|const)\s+([A-Za-z_$][\w$]*)')) { [void]$declared.Add($m.Groups[1].Value) }
@@ -1081,7 +1147,7 @@ function Invoke-BodyRules($Ctx) {
             # A global object written in the wrong case (form.Init) - unless it is the script's own variable.
             if ([int]$c[4] -eq 0 -and $GlobalByLower.ContainsKey($rl) -and $GlobalByLower[$rl] -cne $root -and -not $declared.Contains($root) -and -not $reported.ContainsKey("r$rootPos")) {
                 $reported["r$rootPos"] = 1
-                Add-BodyFinding 'RN11' $Ctx $rootPos "'$root' should be '$($GlobalByLower[$rl])'"
+                Add-BodyFinding 'JS02' $Ctx $rootPos "'$root' should be '$($GlobalByLower[$rl])'"
             }
             $isGlobal = $GlobalByLower.ContainsKey($rl) -and -not $declared.Contains($root) -or $GlobalObjects -ccontains $root
             if (-not ($isGlobal -or $tracked.Contains($root))) { continue }
@@ -1090,42 +1156,42 @@ function Invoke-BodyRules($Ctx) {
             if (-not $isGlobal -and $JsBuiltinClashSet.Contains($member) -and $member -cne 'value') { continue }
             $pos = [int]$c[3]
             if ($reported.ContainsKey("m$pos")) { continue }; $reported["m$pos"] = 1
-            Add-BodyFinding 'RN11' $Ctx $pos "'.$member' should be '.$($ApiByLower[$ml])'"
+            Add-BodyFinding 'JS02' $Ctx $pos "'.$member' should be '.$($ApiByLower[$ml])'"
         }
         # Global functions called in the wrong case (lookUpObject is a member, so covered above)
         foreach ($m in [regex]::Matches($code, '(?<![\w$.])([A-Za-z_$][\w$]*)\s*\(')) {
             $n = $m.Groups[1].Value; $nl = $n.ToLowerInvariant()
             if ($GlobalFnByLower.ContainsKey($nl) -and $GlobalFnByLower[$nl] -cne $n -and -not $declared.Contains($n)) {
-                Add-BodyFinding 'RN11' $Ctx $m.Index "'$n' should be '$($GlobalFnByLower[$nl])'"
+                Add-BodyFinding 'JS02' $Ctx $m.Index "'$n' should be '$($GlobalFnByLower[$nl])'"
             }
         }
         foreach ($m in [regex]::Matches($code, $BoolPattern)) {
             $val = $m.Groups[2].Value
-            Add-BodyFinding 'RN12' $Ctx $m.Index ".$($m.Groups[1].Value) = $val; use $(if ($val -eq '0') { 'false' } else { 'true' })"
+            Add-BodyFinding 'JS03' $Ctx $m.Index ".$($m.Groups[1].Value) = $val; use $(if ($val -eq '0') { 'false' } else { 'true' })"
         }
     }
 
-    # RN16 / RN17 / RN18 JavaScript V8
+    # RX06 / RX07 / RX08 JavaScript V8
     if ($isV8) {
-        foreach ($m in [regex]::Matches($code, '(?<![\w$.])(MsgBox|InputBox)\s*\(', 'IgnoreCase')) { Add-BodyFinding 'RN16' $Ctx $m.Index "$($m.Groups[1].Value)(...)" }
-        foreach ($m in [regex]::Matches($code, '\b(LocalTimeToUTC|UTCToLocalTime)\s*\(', 'IgnoreCase')) { Add-BodyFinding 'RN17' $Ctx $m.Index "$($m.Groups[1].Value)(...)" }
-        foreach ($m in [regex]::Matches($code, '\bForm\s*\.\s*Init\s*\(')) { Add-BodyFinding 'RN18' $Ctx $m.Index 'Form layout' }
+        foreach ($m in [regex]::Matches($code, '(?<![\w$.])(MsgBox|InputBox)\s*\(', 'IgnoreCase')) { Add-BodyFinding 'RX06' $Ctx $m.Index "$($m.Groups[1].Value)(...)" }
+        foreach ($m in [regex]::Matches($code, '\b(LocalTimeToUTC|UTCToLocalTime)\s*\(', 'IgnoreCase')) { Add-BodyFinding 'RX07' $Ctx $m.Index "$($m.Groups[1].Value)(...)" }
+        foreach ($m in [regex]::Matches($code, '\bForm\s*\.\s*Init\s*\(')) { Add-BodyFinding 'RX08' $Ctx $m.Index 'Form layout' }
     }
 
-    # RN21 GetRegistry(key) without a default: Null / empty when the key is not set
+    # RX10 GetRegistry(key) without a default: Null / empty when the key is not set
     foreach ($m in [regex]::Matches($code, '(?<![\w$])(?:App\s*\.\s*)?GetRegistry\s*\(', $opt)) {
         $open = $m.Index + $m.Length - 1
         $close = [GeoScadaScriptScan]::MatchParen($code, $open)
         if ($close -lt 0 -or [GeoScadaScriptScan]::CountArgs($code, $open, $close) -ne 1) { continue }
         $before = $code.Substring([Math]::Max(0, $m.Index - 40), [Math]::Min(40, $m.Index))
         if ($before -match '(?i)\b(CLng|CInt|CDbl|CSng|CBool|CDate|CByte|CCur|Int|Fix|Abs|DateValue|TimeValue|parseInt|parseFloat|Number)\s*\(\s*$') {
-            Add-BodyFinding 'RN21' $Ctx $m.Index "GetRegistry with no default, converted with $($Matches[1])()" 'Error'
+            Add-BodyFinding 'RX10' $Ctx $m.Index "GetRegistry with no default, converted with $($Matches[1])()" 'Error'
         } else {
-            Add-BodyFinding 'RN21' $Ctx $m.Index 'GetRegistry with no default value'
+            Add-BodyFinding 'RX10' $Ctx $m.Index 'GetRegistry with no default value'
         }
     }
 
-    # RN22 VBScript identifier named like a .NET object member (ToString, GetType, GetHashCode, Equals - all tested).
+    # RC10 VBScript identifier named like a .NET object member (ToString, GetType, GetHashCode, Equals - all tested).
     # Undeclared: an error on every use. Declared with Dim in the same procedure: works (tested), one Info.
     # Declared at script level, a parameter, or a Sub / Function of that name: untested, one Warning.
     if (-not $isJs) {
@@ -1143,23 +1209,23 @@ function Invoke-BodyRules($Ctx) {
                 if ($proc) { $d = $decl.Names | Where-Object { $_.Name -eq $key -and $_.Proc -eq $proc.Start } | Select-Object -First 1 }
                 if (-not $d) { $d = $decl.Names | Where-Object { $_.Name -eq $key -and $_.Proc -lt 0 } | Select-Object -First 1 }
                 if (-not $d) {
-                    Add-BodyFinding 'RN22' $Ctx $m.Index "'$name' used as a variable without a declaration" 'Error'
+                    Add-BodyFinding 'RC10' $Ctx $m.Index "'$name' used as a variable without a declaration" 'Error'
                     continue
                 }
                 $once = "$key|$($d.Pos)"
                 if ($reported.ContainsKey($once)) { continue }
                 $reported[$once] = 1
-                if ($d.Kind -eq 'Local') { Add-BodyFinding 'RN22' $Ctx $d.Pos "'$name' is $($d.Desc) - works in 2025 R2, rename when convenient" 'Info' }
-                else { Add-BodyFinding 'RN22' $Ctx $d.Pos "'$name' is $($d.Desc) - untested in 2025 R2" 'Warning' }
+                if ($d.Kind -eq 'Local') { Add-BodyFinding 'RC10' $Ctx $d.Pos "'$name' is $($d.Desc) - works in 2025 R2, rename when convenient" 'Info' }
+                else { Add-BodyFinding 'RC10' $Ctx $d.Pos "'$name' is $($d.Desc) - untested in 2025 R2" 'Warning' }
             }
         }
     }
 
-    # RN28 log on / log off stops the script: App.LogOn / LogOff / LogOnUser / LogOffUser (all languages), and a
+    # RC13 log on / log off stops the script: App.LogOn / LogOff / LogOnUser / LogOffUser (all languages), and a
     # Logon through ViewX COM automation - a variable set from CreateObject("Serck.ViewXApplication"), or the
-    # call chained on directly (V8 has no COM: RN15 covers CreateObject there). Form.Logon is not covered.
+    # call chained on directly (V8 has no COM: RX05 covers CreateObject there). Form.Logon is not covered.
     $logons = [ordered]@{}                                              # position -> @(end of the name, what)
-    foreach ($m in [regex]::Matches($code, '(?<![\w$.])App\s*\.\s*(LogOnUser|LogOffUser|LogOn|LogOff)\b', $opt)) {   # JS: exact case (a wrong case is RN11's)
+    foreach ($m in [regex]::Matches($code, '(?<![\w$.])App\s*\.\s*(LogOnUser|LogOffUser|LogOn|LogOff)\b', $opt)) {   # JS: exact case (a wrong case is JS02's)
         $logons[[string]$m.Index] = @(($m.Index + $m.Length), "App.$($m.Groups[1].Value)")
     }
     if (-not $isV8) {
@@ -1182,14 +1248,39 @@ function Invoke-BodyRules($Ctx) {
         foreach ($k in $logons.Keys) {
             $pos = [int]$k; $what = $logons[$k][1]
             $after = Test-CodeFollows $Ctx $pos ([int]$logons[$k][0]) $procs
-            if ($after.Follows) { Add-BodyFinding 'RN28' $Ctx $pos "$what stops the script in 2025 R2 - the code after it in $($after.Where) does not run" }
-            else { Add-BodyFinding 'RN28' $Ctx $pos "$what is the last statement in $($after.Where) - the script still stops here, so check that nothing calling it needs to carry on afterwards" 'Info' }
+            if ($after.Follows) { Add-BodyFinding 'RC13' $Ctx $pos "$what stops the script in 2025 R2 - the code after it in $($after.Where) does not run" }
+            else { Add-BodyFinding 'RC13' $Ctx $pos "$what is the last statement in $($after.Where) - the script still stops here, so check that nothing calling it needs to carry on afterwards" 'Info' }
         }
     }
 
-    # RN20 debugger statements
+    # RC14 Server.GetOPCValue cannot read aggregates (2025 R2 release). A tag is a dotted name, so Object.Property
+    # and Object.Aggregate.Property look alike: RC14a when a string literal in the tag names a known aggregate
+    # after a dot (".Control", ".Historic.TrendInterval"), RC14b (Info) for every other call. The call is found in
+    # Code (strings masked); the literals are read from NoComments, which keeps them.
+    $litPattern = if ($isJs) { '(["''`])((?:\\.|(?!\1).)*)\1' } else { '"((?:[^"]|"")*)"' }
+    foreach ($m in [regex]::Matches($code, '(?<![\w$.])Server\s*\.\s*GetOPCValue\s*\(', $opt)) {
+        $open = $m.Index + $m.Length - 1
+        $close = [GeoScadaScriptScan]::MatchParen($code, $open)
+        $len = if ($close -gt $open) { $close - $open - 1 } else { [Math]::Min(400, $code.Length - $open - 1) }
+        $found = $null
+        foreach ($lit in [regex]::Matches($Ctx.NoComments.Substring($open + 1, $len), $litPattern)) {
+            $text = $lit.Groups[$(if ($isJs) { 2 } else { 1 })].Value
+            foreach ($seg in [regex]::Matches($text, '\.\s*([A-Za-z_]\w*)')) {
+                $name = $seg.Groups[1].Value
+                if (-not $script:AggregateSet.Contains($name)) { continue }
+                $more = $text.Substring($seg.Index + $seg.Length) -match '^\s*\.'
+                if (-not $more -and $script:AggregatePropertySet.Contains($name)) { continue }   # also a property name
+                $found = $name; break
+            }
+            if ($found) { break }
+        }
+        if ($found) { Add-BodyFinding 'RC14a' $Ctx $m.Index "GetOPCValue tag names the aggregate '.$found' - it cannot be read this way in the 2025 R2 release (unless '$found' is an object's name here)" }
+        else { Add-BodyFinding 'RC14b' $Ctx $m.Index 'GetOPCValue - check that the tag does not read through an aggregate (Object.Aggregate.Property)' }
+    }
+
+    # RX04 debugger statements
     $dbg =if ($isJs) { '\bdebugger\b' } else { '(?im)^[ \t]*Stop[ \t]*\r?$' }
-    foreach ($m in [regex]::Matches($code, $dbg)) { Add-BodyFinding 'RN20' $Ctx $m.Index $(if ($isJs) { 'debugger' } else { 'Stop' }) }
+    foreach ($m in [regex]::Matches($code, $dbg)) { Add-BodyFinding 'RX04' $Ctx $m.Index $(if ($isJs) { 'debugger' } else { 'Stop' }) }
 
     # GS07 syntax looks like the other language
     $vbs = [regex]::Matches($code, '(?im)^[ \t]*(?:Dim\s+\w|Set\s+\w+\s*=|End\s+(?:Sub|Function|If|Select)\b|(?:Public\s+|Private\s+)?Sub\s+\w|If\b.*\bThen[ \t]*\r?$|Next[ \t]*\r?$|Wend\b)')
@@ -1207,7 +1298,21 @@ if (-not (Test-Path -LiteralPath $InputFolder -PathType Container)) { throw "Inp
 if ([string]::IsNullOrWhiteSpace($OutputFolder)) { $OutputFolder = $InputFolder }
 $OutputFolder = [System.IO.Path]::GetFullPath($OutputFolder)
 if (-not (Test-Path -LiteralPath $OutputFolder)) { New-Item -ItemType Directory -Path $OutputFolder -Force | Out-Null }
-foreach ($r in @($IncludeRule) + @($ExcludeRule)) { if ($r -and -not $Rules.Contains($r)) { throw "Unknown rule '$r'. Rules: $($Rules.Keys -join ', ')" } }
+# Rule IDs: a 1.x ID (RN01-RN28) is translated to its 2.0.0 ID; anything else must be a current rule ID.
+# A comma list arrives as one string through powershell -File, so it is split here.
+function Resolve-RuleIds([string[]]$Ids, [string]$Param) {
+    foreach ($r in @($Ids | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() })) {
+        if (-not $r) { continue }
+        if ($OldRuleIds.Contains($r)) {
+            $new = $OldRuleIds[$r]
+            Write-Host "$Param $r is the analyser 1.x ID of $new (rule IDs changed in 2.0.0) - using $new." -ForegroundColor Yellow
+            $new
+        } elseif ($Rules.Contains($r)) { $r }
+        else { throw "Unknown rule '$r' in $Param. Rules: $($Rules.Keys -join ', '), or a 1.x ID (RN01-RN28)." }
+    }
+}
+$IncludeRule = @(Resolve-RuleIds $IncludeRule '-IncludeRule')
+$ExcludeRule = @(Resolve-RuleIds $ExcludeRule '-ExcludeRule')
 
 Write-Host "GeoSCADA-Script-Analyser $AnalyserVersion - reading headers in $InputFolder ..." -ForegroundColor Cyan
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -1481,7 +1586,7 @@ foreach ($rec in $toScan) {
             $k++
         }
 
-        # Pick actions: GS02 / GS03 / GS04 / GS05 / RN13. Only "Call Specific Function" actions (scriptCall)
+        # Pick actions: GS02 / GS03 / GS04 / GS05 / JS04. Only "Call Specific Function" actions (scriptCall)
         # name a function; inline code (scriptCode, scriptTopLevel) is scanned as a script below.
         $acts = @(HL $h 'PickAction')
         $fmt = [int]("0" + (HV $h 'FormatVersion'))
@@ -1522,7 +1627,7 @@ foreach ($rec in $toScan) {
                     if ($t.Defs.ContainsKey($tk)) { $found = $true; $params = @($t.Defs[$tk]); $paramLang = $t.Lang; break }
                     if ($tblJs -and -not $caseOnly) { foreach ($dn in $t.Defs.Keys) { if ($dn -ieq $fn) { $caseOnly = $dn } } }
                 }
-                # RN26: every parameter of the called function needs a value in the pick action. The exporter writes
+                # RC12: every parameter of the called function needs a value in the pick action. The exporter writes
                 # each parameter that has one as "name <= value"; a parameter left blank has no entry (or no value).
                 # Only for a plain function name - a call written with inline arguments passes them itself.
                 if ($found -and $params.Count -and $call -match '^(?:Call\s+)?[A-Za-z_$][\w$]*\s*$') {
@@ -1531,7 +1636,7 @@ foreach ($rec in $toScan) {
                     $missing = @($params | Where-Object { -not $given.ContainsKey($_.ToLowerInvariant()) })
                     if ($missing.Count) {
                         $vbs = -not (Test-IsJs $paramLang)
-                        Add-Finding -Rule 'RN26' -Rec $rec -FileLine $actLines[$a] -Code "PickAction: $($acts[$a])" `
+                        Add-Finding -Rule 'RC12' -Rec $rec -FileLine $actLines[$a] -Code "PickAction: $($acts[$a])" `
                             -Detail ("$where calls '$fn($($params -join ', '))' with no value for: $($missing -join ', ')" + $(if ($vbs) { '' } else { ' (seen with VBScript; untested for JavaScript)' })) `
                             -Severity $(if ($vbs) { 'Error' } else { 'Warning' })
                     }
@@ -1543,7 +1648,7 @@ foreach ($rec in $toScan) {
                     else { Add-Finding -Rule 'GS03' -Rec $rec -FileLine $actLines[$a] -Code "PickAction: $($acts[$a])" -Detail "$where calls '$fn', which is not defined in $scope" }
                 }
                 if ($rec.Language -in @('JScript', 'JScript9') -and $pa.Args -ne '(none)') {
-                    Add-Finding -Rule 'RN13' -Rec $rec -FileLine $actLines[$a] -Code "PickAction: $($acts[$a])" -Detail "$where calls '$fn' with: $($pa.Args)"
+                    Add-Finding -Rule 'JS04' -Rec $rec -FileLine $actLines[$a] -Code "PickAction: $($acts[$a])" -Detail "$where calls '$fn' with: $($pa.Args)"
                 }
             }
         }
@@ -1553,8 +1658,8 @@ foreach ($rec in $toScan) {
     }
 
     # Per-language notes (one per object)
-    if ($rec.Language -in @('JScript', 'JScript9') -and $body.Trim()) { Add-Finding -Rule 'RN14' -Rec $rec -FileLine $h.Lines['Language'][0] -Code "Language: $($rec.Language)" -Detail $rec.Language }
-    if ($rec.Language -eq 'JavaScriptV8' -and $body.Trim()) { Add-Finding -Rule 'RN19' -Rec $rec -FileLine $h.Lines['Language'][0] -Code "Language: $($rec.Language)" -Detail 'JavaScript V8' }
+    if ($rec.Language -in @('JScript', 'JScript9') -and $body.Trim()) { Add-Finding -Rule 'JS05' -Rec $rec -FileLine $h.Lines['Language'][0] -Code "Language: $($rec.Language)" -Detail $rec.Language }
+    if ($rec.Language -eq 'JavaScriptV8' -and $body.Trim()) { Add-Finding -Rule 'RX09' -Rec $rec -FileLine $h.Lines['Language'][0] -Code "Language: $($rec.Language)" -Detail 'JavaScript V8' }
 
     if ($body.Trim()) { Invoke-BodyRules $ctx }
 
@@ -1654,10 +1759,10 @@ if (-not $NoHtml) {
     foreach ($k in $Rules.Keys) {
         # x: why the rule did not run (shown instead of a count, so 0 always means "checked, nothing found")
         $x = if (-not (Test-RuleOn $k)) { 'Not run: left out by -IncludeRule / -ExcludeRule' }
-             elseif ($SkipProgIdCheck -and $k -in 'RN06', 'RN07') { 'Not run: -SkipProgIdCheck' }
+             elseif ($SkipProgIdCheck -and $k -in 'RX01', 'RX02') { 'Not run: -SkipProgIdCheck' }
              elseif ($SeverityRank[$Rules[$k].Severity] -gt $minRank) { "Not reported: its severity is below -MinimumSeverity $MinimumSeverity" }
              else { '' }
-        $rulesJson[$k] = @{ s = $Rules[$k].Severity; t = $Rules[$k].Title; f = $Rules[$k].Fix; r = $Rules[$k].Ref; x = $x }
+        $rulesJson[$k] = @{ s = $Rules[$k].Severity; t = $Rules[$k].Title; f = $Rules[$k].Fix; r = $Rules[$k].Ref; x = $x; o = [string]$OldRuleIdOf[$k] }
     }
     $rows = New-Object System.Collections.Generic.List[object]
     foreach ($f in $sorted) { $rows.Add([object[]]@([string]$f.Severity, [string]$f.Rule, [string]$f.FullName, [string]$f.Class, [string]$f.Language, [string]$f.ScriptLine, [string]$f.FileLine, [string]$f.Code, [string]$f.Detail, [int]$f.InstancesFixed, [string]$f.File, [string]$f.Section, [string]$f.Role)) }
@@ -1689,7 +1794,7 @@ tr.rule:hover{background:var(--code);cursor:pointer}.pill{font-size:11px;font-we
 .controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 10px}.controls input[type=search]{flex:1;min-width:220px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
 .controls select{padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg)}
 details.obj{background:var(--card);border:1px solid var(--line);border-radius:8px;margin:6px 0}details.obj>summary{padding:8px 10px;cursor:pointer;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.prio{font-weight:700;color:var(--muted);min-width:2.5em}.name{font-weight:600;word-break:break-all}.sub{color:var(--muted);font-size:12px}.f{border-top:1px solid var(--line);padding:8px 10px}
+.prio{font-weight:700;color:var(--muted);min-width:2.5em}.name{font-weight:600;word-break:break-all}.sub{color:var(--muted);font-size:12px}.was{white-space:nowrap}.f{border-top:1px solid var(--line);padding:8px 10px}
 .fixes{font-weight:700;color:var(--tmpl)}.act{padding:8px 10px;border-top:1px solid var(--line);font-weight:600}
 details.inst{padding:4px 10px 8px}details.inst ul{margin:4px 0 0;padding-left:20px;columns:2;font-size:12px}
 code,pre{font-family:Consolas,ui-monospace,monospace;font-size:12.5px}pre{background:var(--code);padding:6px 8px;border-radius:6px;margin:4px 0;white-space:pre-wrap;word-break:break-all}
@@ -1701,6 +1806,7 @@ code,pre{font-family:Consolas,ui-monospace,monospace;font-size:12.5px}pre{backgr
 .pick{position:relative}.pick>summary{list-style:none;padding:6px 26px 6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--card);cursor:pointer;white-space:nowrap;position:relative}
 .pick>summary::-webkit-details-marker{display:none}.pick>summary::after{content:'\25BE';position:absolute;right:8px;color:var(--muted)}
 .pickbox{position:absolute;z-index:5;top:100%;right:0;margin-top:4px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;max-height:60vh;overflow:auto;width:440px;max-width:calc(100vw - 32px);box-shadow:0 6px 18px rgba(0,0,0,.18)}
+.pickbox.narrow{width:250px;left:0;right:auto}
 .pickbtns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.pickbtns button{padding:3px 8px;font-size:12px}
 .pickbox label{display:flex;gap:6px;align-items:baseline;padding:2px 0;cursor:pointer}.pickbox label b{min-width:3.2em}
 tr.rule.off{opacity:.45}tr.rule.zero td:nth-child(n+4),tr.rule.notrun td:nth-child(n+4){color:var(--muted)}.notrunwhy{color:var(--warn);font-size:12px;font-weight:600}
@@ -1719,10 +1825,14 @@ th.sort::after{content:'\2195';opacity:.35;margin-left:4px}th[aria-sort=ascendin
 <div class="sub">One entry per object to change, most severe first, then by how many instance copies the change fixes. A template change reaches its instance copies; an overridden instance has to be edited on its own.</div>
 <div class="controls">
 <input type="search" id="q" placeholder="Search object, instance, code, detail...">
-<select id="sev"><option value="">All severities</option><option>Error</option><option>Warning</option><option>Review</option><option>Info</option></select>
-<select id="role"><option value="">All roles</option><option value="Template">Template</option><option value="OverriddenInstance">Overridden instance</option><option value="Standalone">Standalone</option><option value="Instance">Instance</option></select>
+<details class="pick" id="sevpick"><summary id="sevsum">All severities</summary><div class="pickbox narrow">
+<div class="pickbtns"><button type="button" data-a="all">All</button><button type="button" data-a="none">None</button></div>
+<div id="sevlist"></div></div></details>
+<details class="pick" id="rolepick"><summary id="rolesum">All roles</summary><div class="pickbox narrow">
+<div class="pickbtns"><button type="button" data-a="all">All</button><button type="button" data-a="none">None</button></div>
+<div id="rolelist"></div></div></details>
 <details class="pick" id="rulepick"><summary id="rulesum">All rules</summary><div class="pickbox">
-<div class="pickbtns"><button type="button" data-p="all">All</button><button type="button" data-p="none">None</button><button type="button" data-p="RN">RN only</button><button type="button" data-p="GS">GS only</button></div>
+<div class="pickbtns"><button type="button" data-p="all">All</button><button type="button" data-p="none">None</button><button type="button" data-p="RC">RC only</button><button type="button" data-p="JS">JS only</button><button type="button" data-p="RX">RX only</button><button type="button" data-p="GS">GS only</button></div>
 <div id="rulelist"></div></div></details>
 <select id="lang"><option value="">All languages</option></select>
 <span class="sub" id="count"></span>
@@ -1756,19 +1866,24 @@ rows.forEach(function(r){bySev[r[0]]++;objs[r[2]]=1;});
 var names=Object.keys(objs),covered=0,ovr=0;names.forEach(function(n){covered+=obj(n)[2];if(obj(n)[1]==='OverriddenInstance')ovr++;});
 [['Objects to edit',names.length,''],['Instance copies fixed by those edits',covered,'Template'],['Overridden instances (edit individually)',ovr,'OverriddenInstance']].concat(['Error','Warning','Review','Info'].map(function(s){return [s+' findings',bySev[s],s];})).forEach(function(c){var d=el('div','card');d.appendChild(el('b',c[2],String(c[1])));d.appendChild(el('span','sub',c[0]));cards.appendChild(d);});
 var notes=document.getElementById('notes');
-if(!M.progIdCheck)notes.appendChild(el('div','note','COM ProgID registry checks (RN06/RN07) were skipped.'));
-else notes.appendChild(el('div','note','COM ProgID checks (RN06/RN07) used the registry of '+M.host+'. Results apply to machines built the same way as that one.'));
+if(!M.progIdCheck)notes.appendChild(el('div','note','COM ProgID registry checks (RX01/RX02) were skipped.'));
+else notes.appendChild(el('div','note','COM ProgID checks (RX01/RX02) used the registry of '+M.host+'. Results apply to machines built the same way as that one.'));
 if(M.libCheckNotDone>0)notes.appendChild(el('div','note',M.libCheckNotDone+' mimic file(s) were exported without -CheckMissingLibraries, so links to missing libraries (GS01) are not known for them.'));
 var rb=document.querySelector('#rules tbody'),langSel=document.getElementById('lang');
 var agg={};rows.forEach(function(r){var a=agg[r[1]]||(agg[r[1]]={n:0,o:{}});a.n++;a.o[r[2]]=1;});
-// Rule filter and by-rule table: every rule, in rule order (RN01.., then GS01..), so the complete picture is
-// shown - 0 means checked with nothing found; a rule that did not run shows a dash and why (R[k].x).
-// Unticked rules are remembered in this browser, so rules that will not be fixed stay hidden next time.
-function ruleCmp(a,b){var pa=a.slice(0,2),pb=b.slice(0,2);if(pa!==pb)return pa==='RN'?-1:pb==='RN'?1:pa<pb?-1:1;return a.localeCompare(b,undefined,{numeric:true});}
+// Rule filter and by-rule table: every rule, in rule order (RC, JS, RX, then GS; RC06a before RC06b before RC07),
+// so the complete picture is shown - 0 means checked with nothing found; a rule that did not run shows a dash
+// and why (R[k].x). Unticked rules are remembered in this browser, so rules that will not be fixed stay hidden
+// next time. 2.0.0 saves under a new key; the first time, choices saved by a 1.x report are carried over
+// through each rule's 1.x ID (R[k].o).
+var PREFIX={RC:0,JS:1,RX:2,GS:3},OLD={};Object.keys(R).forEach(function(k){if(R[k].o)OLD[R[k].o]=k;});
+function ruleCmp(a,b){var pa=a.slice(0,2),pb=b.slice(0,2);if(pa!==pb){var ia=pa in PREFIX?PREFIX[pa]:9,ib=pb in PREFIX?PREFIX[pb]:9;return ia!==ib?ia-ib:(pa<pb?-1:1);}return a.localeCompare(b,undefined,{numeric:true});}
 var ruleIds=Object.keys(R).sort(ruleCmp);
 ruleIds.forEach(function(k){if(!agg[k])agg[k]={n:0,o:{}};});
-var ruleOn={},ruleBox={},ruleRow={},KEY='GeoSCADA-Script-Analyser.rulesOff',off=[];
-try{off=JSON.parse(localStorage.getItem(KEY)||'[]')||[];}catch(e){off=[];}
+var ruleOn={},ruleBox={},ruleRow={},KEY='GeoSCADA-Script-Analyser.rulesOff.v2',off=[];
+try{var saved=localStorage.getItem(KEY);
+ if(saved===null)off=(JSON.parse(localStorage.getItem('GeoSCADA-Script-Analyser.rulesOff')||'[]')||[]).map(function(k){return OLD[k]||k;});
+ else off=JSON.parse(saved)||[];}catch(e){off=[];}
 ruleIds.forEach(function(k){ruleOn[k]=off.indexOf(k)<0;});
 function saveRules(){try{var prev=JSON.parse(localStorage.getItem(KEY)||'[]')||[];
  var now=prev.filter(function(k){return !R[k];}).concat(ruleIds.filter(function(k){return !ruleOn[k];}));localStorage.setItem(KEY,JSON.stringify(now));}catch(e){}}
@@ -1780,7 +1895,8 @@ var stat={};
 ruleIds.forEach(function(k){
  var a=agg[k],x=R[k].x,tr=el('tr','rule'+(x?' notrun':a.n?'':' zero')),aff=0,on=Object.keys(a.o);on.forEach(function(o){aff+=1+obj(o)[2];});
  stat[k]=x?[rank[R[k].s],k,R[k].t,-1,-1,-1]:[rank[R[k].s],k,R[k].t,a.n,on.length,aff];     // not run sorts below 0
- var td=el('td');td.appendChild(el('span','pill '+R[k].s,R[k].s));tr.appendChild(td);tr.appendChild(el('td',null,k));
+ var td=el('td');td.appendChild(el('span','pill '+R[k].s,R[k].s));tr.appendChild(td);
+ var tk=el('td',null,k);if(R[k].o){var was=el('div','sub was','was '+R[k].o);was.title='Rule ID in analyser 1.x';tk.appendChild(was);}tr.appendChild(tk);
  var tt=el('td');tt.appendChild(el('div',null,R[k].t));if(x)tt.appendChild(el('div','notrunwhy',x));tt.appendChild(el('div','fix',R[k].f+(R[k].r?' ['+R[k].r+']':'')));tr.appendChild(tt);
  [a.n,on.length,aff].forEach(function(v){tr.appendChild(el('td',null,x?'—':String(v)));});
  tr.title='Show only '+k;tr.addEventListener('click',function(){setRules(function(x){return x===k;});document.getElementById('q').scrollIntoView();});rb.appendChild(tr);ruleRow[k]=tr;});
@@ -1797,13 +1913,36 @@ sortRules();
 var rl=document.getElementById('rulelist');
 ruleIds.forEach(function(k){var lb=el('label'),cb=el('input');cb.type='checkbox';
  cb.addEventListener('change',function(){ruleOn[k]=cb.checked;syncRules();saveRules();shown=200;render();});
- lb.appendChild(cb);lb.appendChild(el('b',R[k].s,k));lb.appendChild(el('span',null,R[k].t));lb.appendChild(el('span','sub',R[k].x?'(not run)':'('+agg[k].n+')'));if(R[k].x)lb.title=R[k].x;rl.appendChild(lb);ruleBox[k]=cb;});
-document.querySelectorAll('.pickbtns button').forEach(function(b){b.addEventListener('click',function(){var p=b.getAttribute('data-p');
+ lb.appendChild(cb);lb.appendChild(el('b',R[k].s,k));lb.appendChild(el('span',null,R[k].t));lb.appendChild(el('span','sub',R[k].x?'(not run)':'('+agg[k].n+')'));var tip=[R[k].o?'Was '+R[k].o+' in analyser 1.x.':'',R[k].x||''].filter(Boolean).join(' ');if(tip)lb.title=tip;rl.appendChild(lb);ruleBox[k]=cb;});
+document.querySelectorAll('#rulepick .pickbtns button').forEach(function(b){b.addEventListener('click',function(){var p=b.getAttribute('data-p');
  setRules(function(k){return p==='all'?true:p==='none'?false:k.slice(0,2)===p;});});});
-var pick=document.getElementById('rulepick');
-document.addEventListener('click',function(e){if(pick.open&&!pick.contains(e.target))pick.open=false;});
-document.addEventListener('keydown',function(e){if(e.key==='Escape')pick.open=false;});
 syncRules();
+// Severity and role filters: multi-select drop-downs like the rule filter, with All / None. Not remembered
+// between reports (only the rule filter is). Returns the on/off map that render() reads.
+function makePick(id,keys,names,word,count){
+ var on={},box={},sum=document.getElementById(id+'sum'),list=document.getElementById(id+'list');
+ function sync(){var sel=keys.filter(function(k){return on[k];});keys.forEach(function(k){box[k].checked=on[k];});
+  sum.textContent=sel.length===keys.length?'All '+word:sel.length===0?'No '+word:sel.length<=2?sel.map(function(k){return names[k]||k;}).join(', '):sel.length+' of '+keys.length+' '+word;}
+ keys.forEach(function(k){on[k]=true;var lb=el('label'),cb=el('input');cb.type='checkbox';
+  cb.addEventListener('change',function(){on[k]=cb.checked;sync();shown=200;render();});
+  lb.appendChild(cb);lb.appendChild(el('span','pill '+k,names[k]||k));lb.appendChild(el('span','sub','('+count(k)+')'));list.appendChild(lb);box[k]=cb;});
+ document.querySelectorAll('#'+id+'pick .pickbtns button').forEach(function(b){b.addEventListener('click',function(){var a=b.getAttribute('data-a')==='all';
+  keys.forEach(function(k){on[k]=a;});sync();shown=200;render();});});
+ sync();return on;}
+var sevN={},roleN={},seen={};
+rows.forEach(function(r){sevN[r[0]]=(sevN[r[0]]||0)+1;if(!seen[r[2]]){seen[r[2]]=1;var ro=obj(r[2])[1];roleN[ro]=(roleN[ro]||0)+1;}});
+var roleKeys=['Template','OverriddenInstance','Standalone','Instance'];Object.keys(roleN).forEach(function(k){if(roleKeys.indexOf(k)<0)roleKeys.push(k);});
+var sevOn=makePick('sev',Object.keys(rank),{},'severities',function(k){var n=sevN[k]||0;return n+' finding'+(n===1?'':'s');});
+var roleOn=makePick('role',roleKeys,roleName,'roles',function(k){var n=roleN[k]||0;return n+' object'+(n===1?'':'s')+' to edit';});
+// Close an open drop-down on a click outside it (which also closes one when another opens) or on Escape
+var picks=document.querySelectorAll('details.pick');
+// Keep an open drop-down inside the window: flip it to the other side, then shift it in, when it would overflow
+[].forEach.call(picks,function(p){p.addEventListener('toggle',function(){var b=p.querySelector('.pickbox');b.style.left=b.style.right='';if(!p.open)return;
+ var r=b.getBoundingClientRect(),w=document.documentElement.clientWidth;
+ if(r.right>w-8){b.style.left='auto';b.style.right='0';r=b.getBoundingClientRect();}
+ if(r.left<8){b.style.right='auto';b.style.left=(8-p.getBoundingClientRect().left)+'px';}});});
+document.addEventListener('click',function(e){[].forEach.call(picks,function(p){if(p.open&&!p.contains(e.target))p.open=false;});});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')[].forEach.call(picks,function(p){p.open=false;});});
 var langs={};rows.forEach(function(r){langs[r[4]]=1;});Object.keys(langs).sort().forEach(function(l){var o=el('option',null,l);o.value=l;langSel.appendChild(o);});
 var shown=200;
 function instanceList(name){
@@ -1814,10 +1953,10 @@ function instanceList(name){
   if(list.length>500)d.appendChild(el('div','sub','… and '+(list.length-500)+' more in '+M.instancesCsv+'.'));});
  return d;}
 function render(){
- var q=document.getElementById('q').value.toLowerCase(),sv=document.getElementById('sev').value,lg=langSel.value,ro=document.getElementById('role').value;
+ var q=document.getElementById('q').value.toLowerCase(),lg=langSel.value;
  var groups={},order=[];
- rows.forEach(function(r){if(sv&&r[0]!==sv)return;if(!ruleOn[r[1]])return;if(lg&&r[4]!==lg)return;if(ro&&obj(r[2])[1]!==ro)return;
-  if(q&&(r[2]+' '+r[7]+' '+r[8]+' '+r[1]).toLowerCase().indexOf(q)<0&&!(I[r[2]]&&I[r[2]].some(function(n){return n.toLowerCase().indexOf(q)>=0;})))return;
+ rows.forEach(function(r){if(!sevOn[r[0]])return;if(!ruleOn[r[1]])return;if(lg&&r[4]!==lg)return;if(!roleOn[obj(r[2])[1]])return;
+  if(q&&(r[2]+' '+r[7]+' '+r[8]+' '+r[1]+' '+(R[r[1]]?R[r[1]].o:'')).toLowerCase().indexOf(q)<0&&!(I[r[2]]&&I[r[2]].some(function(n){return n.toLowerCase().indexOf(q)>=0;})))return;
   if(!groups[r[2]]){groups[r[2]]=[];order.push(r[2]);}groups[r[2]].push(r);});
  order.sort(function(a,b){return obj(a)[0]-obj(b)[0]||a.localeCompare(b);});
  var list=document.getElementById('list');list.textContent='';
@@ -1839,7 +1978,7 @@ function render(){
  var mb=document.getElementById('morebtn');mb.hidden=order.length<=shown;mb.textContent='Show more ('+(order.length-shown)+' remaining)';
 }
 document.getElementById('morebtn').addEventListener('click',function(){shown+=200;render();});
-['q','sev','role','lang'].forEach(function(id){document.getElementById(id).addEventListener('input',function(){shown=200;render();});});
+['q','lang'].forEach(function(id){document.getElementById(id).addEventListener('input',function(){shown=200;render();});});
 render();
 })();
 </script></body></html>
@@ -1862,7 +2001,7 @@ Write-Host "Instances CSV: $instancesPath"
 Write-Host "Export check : $checkPath ($($checks.Count) problem(s))"
 if (-not $NoHtml) { Write-Host "HTML         : $htmlPath" }
 if ($libCheckNotDone) { Write-Warning "$libCheckNotDone mimic file(s) were exported without -CheckMissingLibraries; links to missing libraries (GS01) are unknown for them." }
-if (-not $SkipProgIdCheck) { Write-Host "COM ProgID checks (RN06/RN07) used this machine's registry ($env:COMPUTERNAME)." -ForegroundColor DarkGray }
+if (-not $SkipProgIdCheck) { Write-Host "COM ProgID checks (RX01/RX02) used this machine's registry ($env:COMPUTERNAME)." -ForegroundColor DarkGray }
 Write-Host 'Findings are pattern-based: review each one before changing anything.' -ForegroundColor Yellow
 if ($incomplete) {
     Write-Warning "EXPORT INCOMPLETE: $incomplete object(s) are missing from or broken in the export (see $checkPath). Exit code 3."
