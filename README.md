@@ -296,8 +296,8 @@ It writes five files:
   - the objects to edit, each with its role, "fixes N instance copies", the action to take, its findings, and an expandable list of the instances it covers;
   - search, a language filter, and multi-select drop-down filters for severity, role and rule. The severity and role drop-downs list each choice with its count (findings per severity, objects to edit per role) and have All / None shortcuts.
   - The rule filter is a multi-select list of every rule, in rule order (RC, then JS, RX and GS), with its finding count or "(not run)". It has All / None / RC only / JS only / RX only / GS only shortcuts. Clicking a rule in the summary table shows only that rule.
-  - The summary table shows each rule's analyser 1.x ID under its own ("was RN27"), and searching for a 1.x ID finds that rule's findings.
-  - Unticked rules are remembered in that browser, so rules you have decided not to fix stay hidden in later reports. Rules that are new to a report start ticked. Choices saved by a 1.x report are carried over to the new rule IDs the first time a 2.0.0 report is opened.
+  - The summary table shows each rule's earlier IDs under its own: its analyser 1.x ID ("was RN27"), and any retired ID ("was RX10, RN21"). Searching for an earlier ID finds that rule's findings.
+  - Unticked rules are remembered in that browser, so rules you have decided not to fix stay hidden in later reports. Rules that are new to a report start ticked. Choices saved under an earlier rule ID (a 1.x ID, or a retired ID such as RX10) carry over to the rule's current ID.
   - To leave rules out of the CSV files as well, run the analyser with `-ExcludeRule`, for example `-ExcludeRule GS03,GS04`.
   - Problems found by the export check appear in a note at the top. The note is red when the export is incomplete.
 
@@ -374,20 +374,22 @@ Edit the rule table at the top of the script to change a rule's severity.
 | RC03 | RN03 | Warning | VBScript Form control (a variable `Set` from `Form.Add…` in the same procedure) used as a value without `.Value`, e.g. `MsgBox field`, `ElseIf field Mod 500 = 0`, `y = field`, `field = 5`, `CStr(field)`. Not flagged: member use (`field.Value`), `Set y = field`, `field Is Nothing`, `IsObject` / `TypeName`, and passing the control to your own sub or function. | KB #3; p21 |
 | RC04 | RN23 | Warning | A VBScript variable `Set` from `Server.FindObject`, `Server.LookupObject` or `Server.ThisObject` (optionally `.Parent`) used as a value, for example `CStr(obj)`, `MsgBox obj`, `"Id: " & obj` or `obj = x`. A database object no longer has a default property, so `CStr(obj)` no longer gives its Id. The same exemptions as RC03 apply, and an object reached through `.Interface` is not tracked. | KB #4 |
 | RC06a | RN04 | Review | `Form.AddListBox`: the row count is now exact, so a list can now cover buttons placed below it. Empty lists show "No Items". | KB #6; p21-22 |
-| RC06b | RN27 | Review | Every `Form.AddListBox`. In 2025 R2 a list box holding more items than its rows shows a **horizontal** scroll bar instead of the vertical one shown before. List contents are usually filled at run time, so the script can't show whether there are more items than rows, and every list box is listed to check. If the horizontal scrolling is a problem, make the list tall enough for its items, or limit what it holds. | KB #6 (first found in the field) |
+| RC06b | RN27 | Review | Every `Form.AddListBox`. In 2025 R2 a list box holding more items than its rows shows a **horizontal** scroll bar instead of the vertical one shown before. List contents are usually filled at run time, so the script can't show whether there are more items than rows, and every list box is listed to check. If the horizontal scrolling is a problem, make the list tall enough for its items, or limit what it holds. | KB #6 (first found in the field; the article now states it) |
 | RC07 | RN05 | Review | `Form.AddQuery`: the row count is now exact. Empty results show "No Query Results". | KB #7; p22-23 |
 | RC08 | RN09 | Error | Clipboard through `InternetExplorer.Application` or `clipboardData`. | KB #8; p23 |
 | RC09 | RN24 | Warning | A "not found" test that never works: `IsNull(obj)`, `IsEmpty(obj)`, `obj = Null` or `IsObject(obj)` on a `FindObject` / `LookupObject` result. These return `Nothing`, so use `If obj Is Nothing Then`. **Not a 2025 R2 change**: the test never worked, and the not-found case fails later with "Object required". Skipped when the script, or a library the mimic links, defines its own function of that name. | KB #9 |
 | RC10 | RN22 | Error / Warning / Info | A VBScript variable called `ToString`, `GetType`, `GetHashCode` or `Equals` (any case). Undeclared, the 2025 R2 VBScript runtime resolves it to the .NET member of that name, so `toString = x` fails with "The object has no suitable property or field named 'ToString'". All four names have been tested. An undeclared use is an Error on every line that uses it, and the fix is to rename the variable or `Dim` it. Declared with `Dim` / `ReDim` / `Const` in the same Sub or Function, it works (tested), so it is one Info on the declaration. A script-level declaration, a parameter, or a Sub / Function with that name is one Warning, because those cases are untested. Member calls such as `x.ToString` and JScript are not flagged. | KB #10 (first found in the field) |
 | RC11 | RN25 | Warning | A date passed through the registry without conversion. Flagged: `SetRegistry` whose value is a date (`Now`, `Date`, `Time`, `DateAdd(…)` and the other date functions, a `Form.AddDateTime` control's `.Value`, or a variable set from one in the same procedure); a `GetRegistry` value passed straight to a date function (`FormatDateTime`, `DateDiff`, `Year` …); and a `GetRegistry` value written to a date-time control. The fix is `SetRegistry "Key", CLng(Int(CDbl(d)))`, then `CDate(GetRegistry("Key", 0))` to read it back. | KB #11 |
 | RC12 | RN26 | Error / Warning | A Call Specific Function pick action that gives no value to one or more of the function's parameters. In the 2025 R2 release version (88.9742.1) the function **does not run at all**, and no error is shown. Before R2 the missing parameters were passed as `Empty`. Schneider expect a future update to fix this, so check the current release notes for the version you have installed. The function's parameters, found as for GS03, are compared with the pick action's `name <= value` entries; a parameter that is missing, or listed without a value, counts as unset. The fix is to give every parameter a value (`''` or `0` if it is not used), or to remove unused parameters; this works in all versions. Error for VBScript, where it has been seen; Warning for JavaScript, which is untested. A call written with inline arguments is not checked. | KB #12 (first found in the field) |
-| RC13 | RN28 | Warning / Info | A log on or log off: `App.LogOn`, `App.LogOff`, `App.LogOnUser`, `App.LogOffUser`, or a `Logon` through ViewX COM automation (`CreateObject("Serck.ViewXApplication")`). In 2025 R2 the script **stops at the call**, so nothing after it runs, including the rest of any procedure that called this one. The fix is to do everything else first and make the log on or log off the last thing the script does, or to move the follow-on work to its own pick action. Warning when code follows the call in the same procedure (an `Else` branch counts as code); Info when it is already the last statement there. `Form.Logon` is not checked: the article does not mention it. | KB #13 |
+| RC13 | RN28 | Warning / Info | A log on or log off: `App.LogOn`, `App.LogOff`, `App.LogOnUser`, `App.LogOffUser` (in any case, in every language: the ViewX type library spells them `Logon` / `Logoff`), or a `Logon` through ViewX COM automation (`CreateObject("Serck.ViewXApplication")`). In 2025 R2 the script **stops at the call**, so nothing after it runs, including the rest of any procedure that called this one. The fix is to do everything else first and make the log on or log off the last thing the script does, or to move the follow-on work to its own pick action. Warning when code follows the call in the same procedure (an `Else` branch counts as code); Info when it is already the last statement there. `Form.Logon` is not checked: the article does not mention it. | KB #13 |
 | RC14a | *new* | Warning | `Server.GetOPCValue` whose tag text names a known aggregate, such as `myPoint & ".Control"` or `myPoint & ".Control.ControlMaximum"`. In the 2025 R2 release version (88.9742.1) GetOPCValue cannot read an aggregate or a property inside one, and raises an error. Schneider call this a temporary limitation that a future update will fix (errors will still be raised, with different codes), so check the current release notes for the version you have installed. The fix, which works in all versions, is to read it through the object: `Server.FindObject(name).Interface.Control.ControlMaximum`, with error handling for objects that do not have the aggregate. The 110 aggregate names come from the 2025 R2 database schema. A name counts when it follows a dot in a string literal of the tag. `AlarmSummary`, `PSTN` and `Shared` are also property names, so they count only when another name follows. A group or point that happens to share an aggregate's name, such as a group called `Network`, is reported too. | KB #14 |
 | RC14b | *new* | Info | Every other `Server.GetOPCValue`. A tag is a dotted name, so `Object.Property` and `Object.Aggregate.Property` look alike, and a tag built at run time can't be checked at all. These are listed so they can be reviewed; untick RC14b in the rule filter once done. | KB #14 |
-| JS01 | RN10 | Error | `ScriptControl` COM object. Listed in the article's JScript section, but checked in VBScript too. | KB JScript section; p23 |
-| JS02 | RN11 | Error | JScript / V8 wrong-case Geo SCADA name, e.g. `LookUpObject`, `Form.init`, `.value`, `.checked`, `.sql`. | KB JScript section; p24 |
-| JS03 | RN12 | Error | JScript / V8 number assigned to a Boolean property, e.g. `ok.Default = 1`. | KB JScript section; p24 |
-| JS04 | RN13 | Warning | JScript pick action passes arguments; this fails with JScript9Legacy on Windows 11 24H2. | KB JScript section; p24-25 |
+| RC15 | *new* | Error / Warning | VBScript `Set y = … .Interface.<aggregate>`, the way scripts tested whether an object has an aggregate (for example its `Control`) before 2025 R2: `Set y = obj.Interface.Control` then `If y Is Nothing Then`. In 2025 R2 the article says to omit the `Set` and test with `IsObject`: `y = obj.Interface.Control`, then `If Not IsObject(y) Then`. Error when the variable is then tested with `Is Nothing` in the same procedure; Warning for any other `Set` of an aggregate. The aggregate names are RC14a's list. `GISLocation`, which every object has, and the names that are also properties (`AlarmSummary`, `PSTN`, `Shared`) are not reported. | KB #15 |
+| RC16 | RN21 | Error / Warning | `GetRegistry("Key")` with no default value: it returns Null when the key is not set, and in 2025 R2 Null can't be used as a string, so converting or displaying it fails. Error when the call is wrapped directly in `CLng`, `CInt`, `CDbl` and similar; Warning otherwise. The fix is to pass a default, `CLng(GetRegistry("Key", 0))`, or to test the result with `IsNull` as the article does; a VBScript variable assigned from `GetRegistry` and tested with `IsNull(variable)` later in the same procedure is not reported. Was RX10 in analyser 2.x. | KB #16 (first found in the field) |
+| JS01 | RN10 | Error | `ScriptControl` COM object. Listed in the article's JScript section, but checked in VBScript too. | KB J1; p23 |
+| JS02 | RN11 | Error | JScript / V8 wrong-case Geo SCADA name, e.g. `LookUpObject`, `Form.init`, `.value`, `.checked`, `.sql`. | KB J2; p24 |
+| JS03 | RN12 | Error | JScript / V8 number assigned to a Boolean property, e.g. `ok.Default = 1`. | KB J3; p24 |
+| JS04 | RN13 | Warning | JScript pick action passes arguments; this fails with JScript9Legacy on Windows 11 24H2. | KB J4; p24-25 |
 | JS05 | RN14 | Info | JScript in use (not recommended; also has a Windows Server 2025 run-mode issue). | KB JScript section; p25, p58 |
 | RX01 | RN06 | Error | `CreateObject` / `ActiveXObject` of a COM class registered only as a 32-bit in-process server. | Release notes p16 |
 | RX02 | RN07 | Warning | COM class not registered on this machine. | p16 |
@@ -398,7 +400,6 @@ Edit the rule table at the top of the script to change a rule's severity.
 | RX07 | RN17 | Error | `LocalTimeToUTC` / `UTCToLocalTime` in JavaScript V8. | p27 |
 | RX08 | RN18 | Review | Form layout in JavaScript V8 (pixel units). | p27 |
 | RX09 | RN19 | Info | JavaScript V8 script: needs 2025 R2 clients; not supported by Original WebX. | p19, p25-26 |
-| RX10 | RN21 | Error / Warning | `GetRegistry("Key")` with no default value: it returns Null or an empty string when the key is not set, so converting it fails. Error when the call is wrapped directly in `CLng`, `CInt`, `CDbl` and similar; Warning otherwise. The fix is to pass a default: `CLng(GetRegistry("Key", 0))`. | Found in the field (not in the release notes or the article) |
 | GS01 | GS01 | Error | Link to a script library that does not exist. Needs the export run with `-CheckMissingLibraries`. | Exporter header |
 | GS02 | GS02 | Error | Call Specific Function pick action (`scriptCall`) on a mimic that has no script. | Exporter header |
 | GS03 | GS03 | Error | `scriptCall` pick action names a function not defined in the mimic script or its libraries. For an action on an embedded-mimic object, the embedded mimic's script and libraries are also checked. A single inline call (`FilterAlm 1, "x"`) is checked by its first name. | Exporter header |
@@ -411,11 +412,11 @@ Edit the rule table at the top of the script to change a rule's severity.
 The rule groups are:
 
 - **RC** (Resource Centre) rules: the numbered items of the Geo SCADA Knowledge Base article [Adjustments for VBScript in Geo SCADA 2025 R2](https://community.se.com/t5/Geo-SCADA-Knowledge-Base/Adjustments-for-VBScript-in-Geo-SCADA-2025-R2/ba-p/555067) ("KB #n"). RC*nn* is item *nn*; a letter is added when one item has several checks (RC06a, RC06b). Item 5, form layout, needs no code change, so there is no RC05. The article is updated over time, so new items get the next numbers.
-- **JS** rules: the article's "Specific JScript Issues" section, in article order.
-- **RX** rules: other 2025 R2 changes that are not in the article: from the release notes, or found in the field (RX10).
+- **JS** rules: the article's "Specific JScript Issues" section, items J1–J4 in order (JS*nn* is item J*n*); JS05 comes from the section's closing note.
+- **RX** rules: other 2025 R2 changes that are not in the article, from the release notes. When the article takes one in, the rule moves to its RC number and the RX ID is **retired**, never reused: RX10 became RC16 in analyser 2.1.0.
 - **GS** rules: consistency and good-practice checks on what the export recorded.
 
-Page numbers refer to *Geo SCADA Expert 2025 R2 Release Notes* (88.9742.1). The rule IDs changed in analyser 2.0.0 to follow the article's numbering. The **1.x rule** column gives each rule's ID in analyser 1.x (*new* for a rule added in 2.0.0); [CHANGELOG.md](CHANGELOG.md) has the same mapping in old-ID order. The 1.x IDs (RN01–RN28) are not reused, so `-IncludeRule` and `-ExcludeRule` still accept them and translate them to the new IDs, with a note on the console.
+Page numbers refer to *Geo SCADA Expert 2025 R2 Release Notes* (88.9742.1). The rule IDs changed in analyser 2.0.0 to follow the article's numbering. The **1.x rule** column gives each rule's ID in analyser 1.x (*new* for a rule added since); [CHANGELOG.md](CHANGELOG.md) has the same mapping in old-ID order. Old IDs are never reused: the 1.x IDs (RN01–RN28) and retired IDs (RX10) are still accepted by `-IncludeRule` and `-ExcludeRule`, which translate them to the current IDs with a note on the console.
 
 The rules are pattern-based, so treat findings as pointers to review, not as proof.
 
@@ -440,7 +441,7 @@ The rules are pattern-based, so treat findings as pointers to review, not as pro
 InstancesFixed, LinkedByMimics, Findings, Errors, Warnings, Reviews, Infos, Rules, Action, File`.
 
 - `Severity` is the worst finding on the object.
-- `Rules` lists the rules hit, for example `GS03 x5; RX10`.
+- `Rules` lists the rules hit, for example `GS03 x5; RC16`.
 - `LinkedByMimics` is set for script libraries.
 
 **`_ScriptAnalysis_Instances.csv`**: `EditableSource, Priority, Instance`. There is one row for each instance copy covered by an object with findings.
@@ -470,14 +471,14 @@ system before and after upgrading to 2025 R2:
 
 | File | Mimic language | Covers |
 | ---- | -------------- | ------ |
-| `Rule-Examples-VBScript.vbs` | VBScript | RC01, RC02, RC03, RC04, RC06a, RC06b, RC07, RC09, RC11, RC12 (its own buttons), RC13 (its own buttons), RC14, JS01, RX01, RX10 |
+| `Rule-Examples-VBScript.vbs` | VBScript | RC01, RC02, RC03, RC04, RC06a, RC06b, RC07, RC09, RC11, RC12 (its own buttons), RC13 (its own buttons), RC14, RC15, RC16, JS01, RX01 |
 | `Rule-Examples-JScript.js` | JScript | JS02, JS03 |
 
 **Setting up the mimic.**
 
 1. Paste the script into a mimic of the matching language.
 2. Add a pick action of type **Call Specific Function** → `Run_Examples`.
-3. For RC01, create an Internal Analog Point called `Test Analog` in the same group as the mimic. The example writes `Interface.Value` to it, so never point it at a real tag. A third RC01 step, Read, checks that `y = (x.Interface.Value(0))` still works. The script looks for the point first and never creates it. If the point isn't there, it asks whether to carry on without RC01 (**OK**) or stop (**Cancel**), so you can create the point and run the examples again.
+3. For RC01 and RC15, create an Internal Analog Point called `Test Analog` in the same group as the mimic, with no control configured. The RC01 example writes `Interface.Value` to it, so never point it at a real tag. A third RC01 step, Read, checks that `y = (x.Interface.Value(0))` still works. RC15 only reads it: it tests whether the point has a `Control` aggregate. The script looks for the point first and never creates it. If the point isn't there, it asks whether to carry on without RC01 and RC15 (**OK**) or stop (**Cancel**), so you can create the point and run the examples again.
 4. For RC12 (VBScript), add two more buttons with a **Call Specific Function** pick action → `RC12_PickAction`. RC12 is about how a pick action passes arguments, so it isn't part of `Run_Examples`.
    - **RC12 Before:** set `One` to `'hello'` and leave `Two` blank.
    - **RC12 After:** set `One` to `'hello'` and `Two` to `'goodbye'`.
@@ -495,6 +496,8 @@ system before and after upgrading to 2025 R2:
 - On 2025 R2, each Before step is expected to fail, or for RC06a, RC06b and RC07 to look wrong, while each After step works.
 - RC06b is a visual check: the Before list holds 11 items in 3 rows and scrolls horizontally in 2025 R2 (vertically before); the After list is tall enough for its items.
 - RC14 reads the mimic's own `GISLocation.Latitude`, an aggregate every database object has. The Before step uses `Server.GetOPCValue` and is expected to fail in the 2025 R2 release, until the fix Schneider expect; the After step reads `Server.ThisObject.Interface.GISLocation.Latitude` *(both to confirm)*.
+- RC15 tests whether the `Test Analog` point has a `Control` aggregate. The Before step uses the old pattern, `Set y = p.Interface.Control` and `If y Is Nothing`; the After step uses the article's `y = p.Interface.Control` and `If Not IsObject(y)`. Both should report "no control" before 2025 R2, and only the After step in 2025 R2 *(to confirm)*.
+- RC16 reads the registry key `Claude Examples - Never Set`, which must never be set, with and without a default.
 - Expectations marked *(to confirm)* come from the release notes or a field report and have not yet been checked side by side on both versions.
 
 **Issues left out.** These can't show "works before, fails after":
@@ -505,7 +508,7 @@ system before and after upgrading to 2025 R2:
 - **RX02/RX03:** depend on the machine.
 - **GS rules:** these are broken on every version.
 
-**Database objects used.** Apart from RC01's test point, the examples only use objects that always exist: the mimic running the script (`Server.ThisObject`) and the root group (Id 0). RC07's query lists the first 30 groups. The examples write nothing to the database except RC01's test point.
+**Database objects used.** Apart from the RC01 / RC15 test point, the examples only use objects that always exist: the mimic running the script (`Server.ThisObject`) and the root group (Id 0). RC07's query lists the first 30 groups. The examples write nothing to the database except RC01's test point.
 
 RC09 is included even though it is not an R2 change: its Before step fails with "Object required" in **every** version, because `FindObject` and `LookupObject` have always returned `Nothing`. It looks for a child of the mimic, which can never exist because a mimic can't contain other objects. RC11 writes the registry key `Claude Examples - Date` in ViewX's own registry area, and reads it back.
 
@@ -518,7 +521,7 @@ The exporter and the analyser are versioned separately, using semantic versionin
 new features or rules, patch = fixes). The export file layout has its own `FormatVersion`. See
 [CHANGELOG.md](CHANGELOG.md) for the history and the rules.
 
-- **Each exported file** records the exporter that wrote it and its format, e.g. `Exporter: GeoSCADA-Script-Exporter 1.1.0` and `FormatVersion: 2`, together with `ExportedAt`.
+- **Each exported file** records the exporter that wrote it and its format, e.g. `Exporter: GeoSCADA-Script-Exporter 1.1.1` and `FormatVersion: 2`, together with `ExportedAt`.
 - **The analyser** reports which exporter versions, formats and export runs it read, and its own version. These appear on the console, in the HTML report header, and in the `ExporterVersion`, `FormatVersion` and `AnalyserVersion` columns of `_ScriptAnalysis.csv`.
 - **Mixed folders:** a folder holding files from more than one export run or exporter version is listed as `MixedExports` in the export check.
 

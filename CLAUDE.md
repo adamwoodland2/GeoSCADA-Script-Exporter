@@ -96,13 +96,15 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
   - Also recorded: `IsControlledByInstance`.
   - Example: `Region.Site A.Pumps.Pump 1.Display.Tab Status` maps to `~Templates.Pump Station.Devices.Pump.Display.Tab Status`.
 - **File format:** the header lines are comments (`'` or `//`) between `===== GEOSCADA-SCRIPT-EXPORT BEGIN/END =====` markers, followed by the raw script.
-  - Current version: `FormatVersion: 2` (`ExporterVersion` 1.1.0; analyser 2.0.0). See `CHANGELOG.md`.
+  - Current version: `FormatVersion: 2` (`ExporterVersion` 1.1.1; analyser 2.1.0). See `CHANGELOG.md`.
   - Format 2 adds `PICKACTION <n>` code sections for inline pick-action code, `PickActionCode`, `ScriptStartLine` / `ScriptEndLine`, 7-field `PickAction` lines (`N | Where | Action | Type | Context | Function | Args`) and `EmbeddedMimic`.
   - The format is a parsing contract. If it changes, bump `FormatVersion`, update the README spec, and keep the analyser reading every older format. `Split-PickAction` handles both 1 and 2.
 - **File names:** the object's full name plus `.txt`. Invalid characters become `_`, and Windows device names (`CON`, `CON.Child`, `LPT1.x` …) get a leading `_`. Collisions get ` [Id]`. Paths of 248 characters or more use the `\\?\` prefix.
 - **Manifest and CSV cells:** a text cell starting with `= + - @` (or a tab or CR) is written with a leading `'`, to stop spreadsheet formula injection. Both scripts have a `ConvertTo-SafeCsvRow` helper. The analyser undoes the `'` when it reads the manifest (`ConvertFrom-SafeCsvValue`), so keep the two in step.
 - **Line numbering:** a script ending in a line break has an empty last line, which `ScriptEndLine` counts, as an editor does.
 - **Progress:** `Write-Progress` costs about 2 s per call in this host. Always go through the throttled `Show-Progress` helper.
+- **Failures:** everything per object (read, template lookup, header, write) sits inside a try that calls `Register-Failure`, so one bad object becomes a manifest `Error` row (exit 2), never the end of the run.
+- **Arrays through `-File`:** `powershell -File … -Group 'A','B'` arrives as one string `A,B` and matches nothing. Names can contain commas, so the exporter does not split them; call it with `-Command "& '.\GeoSCADA-Script-Exporter.ps1' -Group 'A','B' …"` instead.
 
 ## Analyser: how it works
 
@@ -137,20 +139,21 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
   - Cast values explicitly to `[string]`, `[int]` or `[string[]]`, or the serialiser hits circular references.
   - The UI provides:
     - a by-rule table listing every rule in `$Rules`, in rule order, sortable by any column. A rule with no findings shows `0`; a rule that didn't run shows `—` and the reason (`x` in the rules JSON);
-    - a multi-select rule filter with All / None / RC only / JS only / RX only / GS only shortcuts, whose unticked rules are saved in `localStorage` (key `…rulesOff.v2`). When that key is missing, the 1.x key (`…rulesOff`) is read once and its RN IDs translated through `OLD` (built from each rule's `o`, its 1.x ID);
-    - each rule's 1.x ID ("was RN27") in the by-rule table and the filter's tooltip; search also matches it;
+    - a multi-select rule filter with All / None / RC only / JS only / RX only / GS only shortcuts, whose unticked rules are saved in `localStorage` (key `…rulesOff.v2`). When that key is missing, the 1.x key (`…rulesOff`) is read once and its RN IDs translated through `OLD` (built from each rule's `o`, its 1.x ID, and `p`, its retired IDs). IDs read from the v2 key go through `OLD` too, so an unticked RX10 becomes RC16;
+    - each rule's earlier IDs ("was RX10, RN21", from `was(k)`) in the by-rule table and the filter's tooltip; search also matches them;
     - rule order from `ruleCmp`: prefix order RC, JS, RX, GS (`PREFIX`), then a numeric compare, so RC06a < RC06b < RC07;
     - severity and role filters: multi-select drop-downs like the rule filter, built by `makePick` (All / None, a count per choice, not remembered between reports); a language `<select>`; and search. Every `details.pick` closes on an outside click or Escape and is shifted back inside the window when it opens.
 
 ### Rule conventions
 
-- **Rule IDs (since 2.0.0) follow the Resource Centre (Knowledge Base) article** "Adjustments for VBScript in Geo SCADA 2025 R2" (`$KB` in the analyser, which records the date it was last checked; the latest printout is `References/Article on Changes 2026-11-04.pdf`). The article is updated over time, so re-check it for new items.
+- **Rule IDs (since 2.0.0) follow the Resource Centre (Knowledge Base) article** "Adjustments for VBScript in Geo SCADA 2025 R2" (`$KB` in the analyser, which records the date it was last checked; the latest printout is `References/ResCentre 2026-11-05.pdf`, items 1–16 and J1–J4). The article is updated over time, so re-check it for new items.
   - **RC*nn*:** article item *nn* (RC = Resource Centre), letter-suffixed when one item has several checks (RC06a row count / RC06b scrolling; RC14a known aggregate / RC14b every other GetOPCValue). Item 5 (form layout) has no rule. A new article item gets the next RC number.
-  - **JS*nn*:** the article's "Specific JScript Issues" section (unnumbered there), in article order: JS01 ScriptControl (also checked in VBScript), JS02 case, JS03 Booleans, JS04 pick-action arguments, JS05 JScript in use.
-  - **RX*nn*:** 2025 R2 changes not in the article: RX01–RX03 64-bit COM, RX04 debugger, RX05–RX09 V8, RX10 GetRegistry default (field). If the article adds one of these, move it to RC (a breaking change; the RX number is retired, not reused).
+  - **JS*nn*:** the article's "Specific JScript Issues" section, now numbered J1–J4 there (JS*nn* = J*n*): JS01 ScriptControl (also checked in VBScript), JS02 case, JS03 Booleans, JS04 pick-action arguments; JS05 JScript in use is the section's closing note.
+  - **RX*nn*:** 2025 R2 changes not in the article: RX01–RX03 64-bit COM, RX04 debugger, RX05–RX09 V8. When the article adds one, move it to its RC number and **retire** the RX number: RX10 became RC16 in 2.1.0. The user treats a single move like this as **minor**, not breaking: no column changes, and the retired ID is still translated everywhere.
   - **GS*nn*:** exporter-metadata checks (unchanged since 1.x).
-  - **Never reuse an ID.** The 1.x IDs **RN01–RN28** are retired; the user chose new prefixes so that no old ID means something new. `$OldRuleIds` (after `$Rules`) maps each 1.x ID to its 2.0.0 ID: `-IncludeRule` / `-ExcludeRule` translate them (`Resolve-RuleIds`, with a console note), and the HTML shows them. `Run-Tests.ps1` checks the map covers RN01–RN28 once each, points at real rules, and agrees with the README "1.x rule" column and the CHANGELOG 2.0.0 table.
-  - Renumbering is breaking (major version): the `Rule` CSV column changes. Use new IDs, extend the old → new map, put a table in `CHANGELOG.md`, and do the rename in one pass with all IDs mapped at once, so renames can't chain. The 2.0.0 rename was checked by running 1.4.0 and 2.0.0 over both exports: every finding matched line-for-line under its new ID.
+  - **Never reuse an ID.** The 1.x IDs **RN01–RN28** are retired; the user chose new prefixes so that no old ID means something new. `$OldRuleIds` (after `$Rules`) maps each 1.x ID straight to its **current** ID (RN21 → RC16, not via RX10), so translations never chain. `$RetiredRuleIds` maps IDs retired since 2.0.0 (RX10 → RC16). `-IncludeRule` / `-ExcludeRule` translate both (`Resolve-RuleIds`, with a console note), and the HTML shows both (`o` = 1.x ID, `p` = retired IDs). `Run-Tests.ps1` checks the 1.x map covers RN01–RN28 once each, points at real rules, and agrees with the README "1.x rule" column and the CHANGELOG 2.0.0 table (whose RX10 resolves through `$RetiredRuleIds`); and that retired IDs are not current IDs, point at real rules, and appear in the README ("was RX10") and a CHANGELOG table.
+  - **Moving an RX rule to RC:** rename it in `$Rules`, `Invoke-BodyRules`, the help text, README, fixtures (tags) and examples; add it to `$RetiredRuleIds`; point its `$OldRuleIds` entry at the new ID; add a retired → now table to the CHANGELOG.
+  - A wholesale renumbering (like 2.0.0's) is breaking (major version): the `Rule` CSV column changes throughout. Moving one RX rule to RC with its old ID retired and translated is minor (see RX above). Use new IDs, extend the old → new map, put a table in `CHANGELOG.md`, and do the rename in one pass with all IDs mapped at once, so renames can't chain. The 2.0.0 rename was checked by running 1.4.0 and 2.0.0 over both exports: every finding matched line-for-line under its new ID.
   - Refs cite the item number (`$KB #6 '…'`) plus the release-notes page where there is one.
   - **Reading the KB printouts:** they come from Microsoft Print to PDF, which draws most text as shapes, so text extraction gets almost nothing. Render the pages with the Windows `Windows.Data.Pdf` API from PowerShell 5.1 (`PdfDocument.LoadFromFileAsync` → `GetPage(i).RenderToStreamAsync` → PNG) and read the images.
   - **RC01:** flags `.Value(x)` only when the call is the whole statement (a set). Reads such as `y = (x.Interface.Value(0))` work.
@@ -174,7 +177,7 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
     - It lives in the pick-action loop, next to GS03, and uses the parameter names now stored by `Get-FunctionDefs` (name → `string[]`).
     - A parameter counts as given only if it appears as `name <= value` in the PickAction `Args`. In the XML, a blank parameter is either missing or an `<Arg>` with no `<Animation>`; the exporter writes the latter as a bare name.
     - Header finding, so it's tested per button in `Run-Tests.ps1`, not by tags.
-  - **RC13:** `App.LogOn` / `LogOff` / `LogOnUser` / `LogOffUser` (all languages; exact case in JS, where a wrong case is JS02's), and `.Logon` on a variable set from `CreateObject("Serck.ViewXApplication")` or chained on it. In R2 the script stops at the call.
+  - **RC13:** `App.LogOn` / `LogOff` / `LogOnUser` / `LogOffUser` (all languages; the method name in any case, because the native `ViewXCore.dll` type library spells them `Logon` / `Logoff` while the article writes `LogOn`; in JS the object must be exactly `App`, since `app` is a script variable, and a wrong method case is also JS02's), and `.Logon` on a variable set from `CreateObject("Serck.ViewXApplication")` or chained on it. In R2 the script stops at the call.
     - `Test-CodeFollows` decides the severity: Warning when code follows in the same procedure, Info when the call is the last statement. In JS the procedure is the innermost enclosing `function … {` / `=> {` (`MatchBrace`).
     - Deliberately conservative: only whitespace, block closers (`End If`, `Next`, `Loop`, `}` …) and `Exit` / `return` / `break` are ignored, so an `Else` branch counts as code.
     - `Form.Logon` is not covered (not in the article). Severity is tested per procedure in `Run-Tests.ps1`.
@@ -182,7 +185,9 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
     - `$AggregateNames` is the 110 aggregate names from the 2025 R2 schema, read through `Connection.GetClass('CDBObject')` → `DerivedClasses` / `Aggregates` / `AggregateClasses` (read-only). `$AggregatesAlsoProperties` (AlarmSummary, PSTN, Shared) are also property names, so they need a following name. Re-read the schema on a new version.
     - On the two exports, RC14a found 2 per export (both real `.Control.Action1Desc` reads); RC14b about 1,600 / 400.
     - `GISLocation` exists on every `CDBObject` (it can't be disabled), so examples can use `Server.ThisObject.FullName & ".GISLocation.Latitude"`.
-  - **RX10:** `GetRegistry` without a default.
+  - **RC15** (article #15): VBScript `Set y = … .Interface.<aggregate>` (statement ends at the aggregate name). Error when `y Is Nothing` follows in the same procedure (the article's pattern); Warning otherwise. Skips `GISLocation` and `$AggregatesAlsoProperties`. On the 2026-11-05 export: 1 Error, 12 Warnings, all `.Interface.Historic`.
+  - **RC16** (article #16; RX10 in 2.x): `GetRegistry` without a default. Not reported for the article's fix: VBScript `a = GetRegistry("k")` with `IsNull(a)` later in the same procedure.
+  - **RC12 parameters:** `Get-FunctionDefs` lets an empty `()` sit inside a VBScript parameter list, and `Get-ParamNames` strips it, so `Sub F(vals(), n)` gives `vals`, `n`.
 - **GS01–GS08:** best-practice and consistency checks from exporter metadata. Some will deliberately never be fixed, which is why the HTML filter remembers unticked rules.
 - **A new rule needs:**
   - an entry in `$Rules`;
@@ -198,11 +203,11 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
 ## Testing
 
 - **`Tests\Run-Tests.ps1`:** must pass before every commit. It builds fixtures in `%TEMP%\GeoSCADA-Script-Analyser-Tests` and runs five groups of checks:
-  - every `EXPECT:` / `NOT:` tag, by file line (currently 184 tags), plus per-case checks for the RC12 buttons and RC13 severities;
+  - every `EXPECT:` / `NOT:` tag, by file line (currently 199 tags), plus per-case checks for the RC12 buttons, RC13 severities and RC15 severities;
   - template batching and the export check, with and without a manifest;
   - `-ManifestOnly`;
   - the exporter's helper functions;
-  - the 1.x rule IDs: the `$OldRuleIds` map (read from the analyser's syntax tree) against `$Rules`, the README and the CHANGELOG, and `-IncludeRule` / `-ExcludeRule` with a 1.x ID.
+  - old rule IDs: the `$OldRuleIds` and `$RetiredRuleIds` maps (read from the analyser's syntax tree) against `$Rules`, the README and the CHANGELOG, and `-IncludeRule` / `-ExcludeRule` with a 1.x ID and a retired ID.
 
   The fixture and test scripts:
   - `New-Fixtures.ps1`: format 1, with the rule tags.
@@ -211,7 +216,7 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
   - `Test-Exporter.ps1`: pulls exporter functions out of its syntax tree, without running it or connecting. It tests file names, the file layout and line numbers, relative names and the CSV guard.
   - Not covered by any test: XML extraction from live documents, template resolution, binary document parsing and failure handling. These need the server.
 - **Proving a fixture catches a bug:** the C# types are compiled once per process. To compare old and new behaviour, run each version in a fresh `powershell -NoProfile -File …` process.
-- **HTML changes:** write a copy of the report with an extra `<script>` that clicks controls and writes results into a `<pre>`. Run it with `msedge --headless=new --virtual-time-budget=5000 --dump-dom file:///…`, and use `--screenshot` to check the layout.
+- **HTML changes:** write a copy of the report with an extra `<script>` that clicks controls and writes results into a `<pre>`. Run it with `msedge --headless=new --virtual-time-budget=5000 --dump-dom file:///…`, and use `--screenshot` to check the layout. Calling `msedge` directly from the PowerShell tool can print nothing; `Start-Process` with `--no-sandbox`, a fresh `--user-data-dir` and `-RedirectStandardOutput` works. To test saved filter choices, inject a `<script>` right after `<body>` that sets the `localStorage` key first.
 - **Exporter changes:** export a few `Claude.*` objects and one real group, then check them. A full export needs the user's go-ahead first.
 
 ## PowerShell 5.1 pitfalls hit in this code
@@ -226,6 +231,8 @@ Exporter parameters: `-OutputFolder -Server -Port -Username -Password -Group -Na
 ## Current state (October 2026)
 
 - **Pushed** to `main` (history rewritten on 2026-10-15 to remove customer object names; keep examples generic, e.g. `Plant.*`, `Region.Site A.*`). Asking GitHub Support to purge the two old commit IDs is left to the user. Commit only when asked.
-- **GS03 is provisional** until there is a full export in format 2. The last full export (`full2`) is format 1, without the embedded-mimic data. Ask before running a new full export.
+- **GS03 is provisional** until a full format-2 export has been reviewed. A format-2 export now exists (a git-ignored `ScriptExport_*` folder in the repo, 44,598 files, exporter 1.1.0, made by the user on 2026-11-05) but its GS03 findings have not been reviewed yet. Ask before running a new full export.
+- **New machine (2026-11-04):** the repo was re-cloned on a different server; `Tools/` and `CLAUDE.local.md` stayed on the old one until the user copies them over. `gh` is not installed here.
+- **Unconfirmed on R2 (2.1.0):** RC15's Warning case (a `Set` of an aggregate with no `Is Nothing` test) and the RC15 example pair are untested in ViewX.
 - **Test mimics gone (checked 2026-10-29):** `Claude.Test`, `Claude.Default`, `Claude.ArrayTest`, `Claude.PerformanceTest` and `Claude.Examples.*` no longer exist on this server; the `Claude` group now holds other mimics. Ask before recreating any of them.
 - **Unconfirmed on R2:** the example mimics haven't been run in ViewX. Their "(to confirm)" expectations, and RC10's script-level `Dim` and parameter cases, are untested.

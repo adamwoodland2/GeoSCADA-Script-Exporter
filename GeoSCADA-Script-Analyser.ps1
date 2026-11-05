@@ -39,8 +39,10 @@
         RC13   App.LogOn / LogOff / LogOnUser / LogOffUser, COM .Logon   (the script stops at the call)
         RC14a  GetOPCValue tag names a known aggregate                   (cannot read aggregates)
         RC14b  Every other GetOPCValue                                   (Info - check for aggregates)
+        RC15   Aggregate tested with Set ... Is Nothing                  (omit Set, use IsObject)
+        RC16   GetRegistry without a default value                       (Null when unset; was RX10)
 
-      The article's "Specific JScript Issues" (JSnn)
+      The article's "Specific JScript Issues" (JSnn = article item Jn)
         JS01   ScriptControl COM object                                  (not recommended / 32-bit)
         JS02   JScript / V8 wrong-case Geo SCADA name (e.g. .value, LookUpObject, Form.init)
         JS03   JScript / V8 number assigned to a Boolean property        (e.g. ok.Default = 1)
@@ -57,7 +59,7 @@
         RX07   LocalTimeToUTC / UTCToLocalTime in JavaScript V8          (not supported)
         RX08   Form layout in JavaScript V8                              (pixel units)
         RX09   JavaScript V8 client compatibility                        (2025 R2 clients only)
-        RX10   GetRegistry without a default value                       (Null / empty when unset)
+        (RX10 moved to RC16 in 2.1.0 when the article added it; RX10 is retired and never reused)
 
       Exporter metadata (GSnn)
         GS01   Link to a script library that does not exist
@@ -70,9 +72,10 @@
         GS08   Script library not linked by any mimic
 
     Rule IDs changed in 2.0.0 to follow the article's numbering: RC, JS and RX replace the 1.x IDs
-    RN01-RN28, and GS is unchanged. No 1.x ID is reused, so -IncludeRule / -ExcludeRule still accept
-    the 1.x IDs (translated, with a note) and the HTML report shows each rule's 1.x ID. CHANGELOG.md
-    and the README rules table map them.
+    RN01-RN28, and GS is unchanged. When the article later takes in an RX item, the rule moves to its
+    RC number and the RX ID is retired (2.1.0: RX10 -> RC16). No old ID is ever reused, so
+    -IncludeRule / -ExcludeRule still accept 1.x IDs and retired IDs (translated, with a note) and the
+    HTML report shows each rule's earlier IDs. CHANGELOG.md and the README rules table map them.
 
     Inline pick-action code (Execute Code Fragment, also on the top-level mimic) is scanned with the
     same rules as the script; findings give its Section (e.g. "PickAction 3"). Function references
@@ -118,9 +121,15 @@
     aggregates in the 2025 R2 schema (".Control", ".Historic.", ".ScanParams." ...); RC14b (Info)
     lists every other GetOPCValue, so tags built at run time can be checked.
 
-    RX10 was found in the field: GetRegistry("Key") returns Null or an empty string when the key has
-    not been set, so converting it (CLng ...) fails. It is an Error when the call is wrapped
-    directly in a conversion function and a Warning otherwise.
+    RC15: before 2025 R2 a script could test whether an object has an aggregate (for example
+    Control) with Set y = obj.Interface.Control : If y Is Nothing Then. In 2025 R2 the article says to
+    omit the Set and test with IsObject(y). Error when the variable is then tested with Is Nothing
+    (the not-found case the Set no longer handles); Warning otherwise.
+
+    RC16 (RX10 in 2.x; first found in the field, now article item 16): GetRegistry("Key") returns
+    Null when the key has not been set and no default is given, and in 2025 R2 Null cannot be used as
+    a string, so converting or displaying it fails. It is an Error when the call is wrapped directly
+    in a conversion function and a Warning otherwise.
 
     Severities: Error (fails or misbehaves in 2025 R2), Warning (likely to misbehave - check),
     Review (behaviour or layout changed - look at it), Info (advisory).
@@ -179,11 +188,12 @@
     Lowest severity to report: Error, Warning, Review or Info (default).
 
 .PARAMETER IncludeRule
-    Only run these rule IDs (e.g. RC01,JS02,GS01). A 1.x rule ID (RN01-RN28) is translated to its
-    2.0.0 ID, with a note.
+    Only run these rule IDs (e.g. RC01,JS02,GS01). A 1.x rule ID (RN01-RN28) or a retired ID (RX10) is
+    translated to its current ID, with a note.
 
 .PARAMETER ExcludeRule
-    Skip these rule IDs. A 1.x rule ID (RN01-RN28) is translated to its 2.0.0 ID, with a note.
+    Skip these rule IDs. A 1.x rule ID (RN01-RN28) or a retired ID (RX10) is translated to its current
+    ID, with a note.
 
 .PARAMETER IncludeInstances
     Scan instance copies too, instead of only the editable source of each script.
@@ -233,19 +243,21 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AnalyserVersion = '2.0.0'      # see CHANGELOG.md; bump with every released change
+$AnalyserVersion = '2.1.0'      # see CHANGELOG.md; bump with every released change
 $SupportedFormat = 2      # newest exporter FormatVersion this analyser understands
 
 # =============================================================================================
 #  RULES  -  severity, title, fix and source for each rule. Edit severities here.
 # =============================================================================================
 $RN = 'Geo SCADA 2025 R2 Release Notes'
-$KB = 'Geo SCADA Knowledge Base: Adjustments for VBScript in Geo SCADA 2025 R2 (community.se.com; published 2026-10-15, checked 2026-11-04)'
-# Rule IDs (2.0.0 onwards). The 1.x IDs RN01-RN28 are never reused (see $OldRuleIds below):
+$KB = 'Geo SCADA Knowledge Base: Adjustments for VBScript in Geo SCADA 2025 R2 (community.se.com; published 2026-10-15, checked 2026-11-05)'
+# Rule IDs (2.0.0 onwards). The 1.x IDs RN01-RN28 and retired IDs are never reused (see $OldRuleIds and
+# $RetiredRuleIds below):
 #   RCnn  the numbered items of the Resource Centre (Knowledge Base) article; a letter (RC06a, RC06b) when
 #         one item has several checks
-#   JSnn  the article's "Specific JScript Issues" section, in article order
-#   RXnn  other 2025 R2 changes that are not in the article (release notes, field findings)
+#   JSnn  the article's "Specific JScript Issues" section, items J1-J4 in article order (JS05: its closing note)
+#   RXnn  other 2025 R2 changes that are not in the article (release notes, field findings). When the article
+#         adds one, the rule moves to its RC number and the RX ID is retired (RX10 -> RC16 in 2.1.0)
 #   GSnn  checks on the exporter's metadata (the same IDs as in 1.x)
 $Rules = [ordered]@{
     RC01  = @{ Severity = 'Error';   Title = '.Value(x) used to set a value'
@@ -259,7 +271,7 @@ $Rules = [ordered]@{
     RC06a = @{ Severity = 'Review';  Title = 'Form.AddListBox row count is now exact'
                Fix = 'The rows argument is now honoured exactly; reduce it if the list now overlaps buttons or other items. Empty lists show "No Items".'; Ref = "$KB #6 'Behavior Changes to Form.AddListBox'; $RN p21-22" }
     RC06b = @{ Severity = 'Review';  Title = 'List box scrolls horizontally when it has more items than rows'
-               Fix = 'Check how each list box scrolls when it holds more items than its rows: in 2025 R2 it shows a horizontal scroll bar instead of the vertical one shown before. The content is usually dynamic, so every Form.AddListBox is listed. If the horizontal scrolling is a problem, make the list tall enough for its items (the rows argument or ListBox.Rows), or limit what it holds.'; Ref = "$KB #6 'Behavior Changes to Form.AddListBox' (first found in the field)" }
+               Fix = 'Check how each list box scrolls when it holds more items than its rows: in 2025 R2 it shows a horizontal scroll bar instead of the vertical one shown before. The content is usually dynamic, so every Form.AddListBox is listed. If the horizontal scrolling is a problem, make the list tall enough for its items (the rows argument or ListBox.Rows), or limit what it holds.'; Ref = "$KB #6 'Behavior Changes to Form.AddListBox' ('the ListBox always scrolls horizontally when there are more rows available than will fit'; first found in the field)" }
     RC07  = @{ Severity = 'Review';  Title = 'Form.AddQuery row count is now exact'
                Fix = 'The rows argument is now honoured exactly; reduce it if the list now overlaps buttons or other items. Empty results show "No Query Results".'; Ref = "$KB #7 'Behavior Changes to Form.AddQuery'; $RN p22-23" }
     RC08  = @{ Severity = 'Error';   Title = 'Clipboard accessed through Internet Explorer'
@@ -278,14 +290,18 @@ $Rules = [ordered]@{
                Fix = 'In the 2025 R2 release version (88.9742.1) Server.GetOPCValue cannot read an aggregate, or a property inside one (for example myPoint & ".Control" or myPoint & ".Control.ControlMaximum"): it raises an error. Schneider describe this as a temporary limitation that a future update will fix (errors will still be raised, with different codes), so check the current release notes for the version you have installed. Reading it through the object works in all versions: Server.FindObject(name).Interface.Control.ControlMaximum, with error handling for objects that do not have the aggregate. The aggregate names come from the 2025 R2 database schema, so a group or point that happens to share an aggregate''s name (such as a group called Network) is reported too.'; Ref = "$KB #14 'The Server.GetOPCValue method cannot read aggregates'" }
     RC14b = @{ Severity = 'Info';    Title = 'GetOPCValue tag not checked for aggregates'
                Fix = 'A GetOPCValue tag is a dotted name such as Object.Property or Object.Aggregate.Property, and the script alone cannot always show which. If it reads through an aggregate, it fails in the 2025 R2 release version (see RC14a). Calls whose text names a known aggregate are RC14a; this lists every other call, including tags built at run time, so they can be checked. Hide RC14b with the rule filter once reviewed.'; Ref = "$KB #14 'The Server.GetOPCValue method cannot read aggregates'" }
+    RC15  = @{ Severity = 'Error';   Title = 'Aggregate tested with Set ... Is Nothing'
+               Fix = 'To test whether an object has an aggregate (for example its Control), omit the Set and test with IsObject: y = obj.Interface.Control : If Not IsObject(y) Then MsgBox "Has No Control". In 2025 R2 the old pattern - Set y = obj.Interface.Control : If y Is Nothing Then - no longer works for an object without the aggregate. Error when the variable is then tested with Is Nothing; Warning for any other Set of an aggregate that can be absent (GISLocation, which every object has, is not reported).'; Ref = "$KB #15 'Changes to checking an Aggregate, e.g. to test for Controls'" }
+    RC16  = @{ Severity = 'Warning'; Title = 'GetRegistry without a default value'
+               Fix = 'Pass a default, e.g. CLng(GetRegistry("Key", 0)), or test the result with IsNull before using it. A key that has not been set returns Null, and in 2025 R2 Null cannot be used as a string, so converting or displaying it fails (CLng, CInt, CDbl, MsgBox ...).'; Ref = "$KB #16 'GetRegistry returns Null if there is no default' (first found in the field; RX10 in analyser 2.x)" }
     JS01  = @{ Severity = 'Error';   Title = 'ScriptControl COM object'
-               Fix = 'ScriptControl is 32-bit and not recommended. Replace MsgBox emulation with the Form object (JScript) or Window.Alert/Confirm/Prompt (V8). Listed in the JScript section of the article, but checked in VBScript too.'; Ref = "$KB 'Specific JScript Issues - Calling Script Functions via COM'; $RN p23" }
+               Fix = 'ScriptControl is 32-bit and not recommended. Replace MsgBox emulation with the Form object (JScript) or Window.Alert/Confirm/Prompt (V8). Listed in the JScript section of the article, but checked in VBScript too.'; Ref = "$KB J1 'JScript Execution Issues - Calling Script Functions via COM'; $RN p23" }
     JS02  = @{ Severity = 'Error';   Title = 'Wrong case for a Geo SCADA name'
-               Fix = 'JScript (and V8) are now case-sensitive for Geo SCADA objects, methods and properties. Use the exact name shown.'; Ref = "$KB 'Specific JScript Issues - Case Sensitivity'; $RN p24" }
+               Fix = 'JScript (and V8) are now case-sensitive for Geo SCADA objects, methods and properties. Use the exact name shown.'; Ref = "$KB J2 'JScript Execution Issues - Case Sensitivity'; $RN p24" }
     JS03  = @{ Severity = 'Error';   Title = 'Number assigned to a Boolean property'
-               Fix = 'Use true / false, e.g. ok.Default = true;'; Ref = "$KB 'Specific JScript Issues - Type Conversions'; $RN p24" }
+               Fix = 'Use true / false, e.g. ok.Default = true;'; Ref = "$KB J3 'JScript Execution Issues - Type Conversions'; $RN p24" }
     JS04  = @{ Severity = 'Warning'; Title = 'JScript pick action passes arguments'
-               Fix = 'JScript9Legacy (default on Windows 11 24H2) cannot pass parameters from a pick action. Remove the parameters, convert the script to JavaScript V8, or (at your own risk) set JScriptReplacement=0.'; Ref = "$KB 'Specific JScript Issues - Functions with Arguments'; $RN p24-25" }
+               Fix = 'JScript9Legacy (default on Windows 11 24H2) cannot pass parameters from a pick action. Remove the parameters, convert the script to JavaScript V8, or (at your own risk) set JScriptReplacement=0.'; Ref = "$KB J4 'JScript Execution Issues - Functions with Arguments'; $RN p24-25" }
     JS05  = @{ Severity = 'Info';    Title = 'JScript in use'
                Fix = 'Schneider Electric does not recommend JScript with Geo SCADA. Consider converting to JavaScript V8. On Windows Server 2025, JScript mimic scripts do not run after switching from Design to Run mode.'; Ref = "$KB 'Specific JScript Issues'; $RN p25, p58" }
     RX01  = @{ Severity = 'Error';   Title = 'COM class is 32-bit only'
@@ -306,8 +322,6 @@ $Rules = [ordered]@{
                Fix = 'Form positions and sizes in V8 are pixel units, not text units. Check the Form.Add... coordinates.'; Ref = "$RN p27 'Translation Notes'" }
     RX09  = @{ Severity = 'Info';    Title = 'JavaScript V8 script'
                Fix = 'Runs only on Geo SCADA 2025 R2 or later ViewX / Virtual ViewX clients; not supported by the Original WebX client.'; Ref = "$RN p19, p25-26" }
-    RX10  = @{ Severity = 'Warning'; Title = 'GetRegistry without a default value'
-               Fix = 'Pass a default, e.g. CLng(GetRegistry("Key", 0)). A key that has not been set returns Null / an empty string, which fails when converted (CLng, CInt, CDbl ...).'; Ref = '2025 R2 script runtime (field experience; not in the release notes or the article)' }
     GS01  = @{ Severity = 'Error';   Title = 'Linked script library does not exist'
                Fix = 'Remove the link or point it at the library''s current location.'; Ref = 'Exporter header LibraryMissing' }
     GS02  = @{ Severity = 'Error';   Title = 'Function pick action but the mimic has no script'
@@ -325,15 +339,19 @@ $Rules = [ordered]@{
     GS08  = @{ Severity = 'Info';    Title = 'Script library not linked by any mimic'
                Fix = 'Possibly unused (only mimics are counted; libraries can also be used by other means). Consider removing it.'; Ref = 'Exporter header ReferencedByMimics' }
 }
-# Analyser 1.x rule ID -> 2.0.0 rule ID (GS IDs did not change). -IncludeRule / -ExcludeRule translate these,
-# and the HTML report shows them and carries 1.x rule-filter choices over. RC14a / RC14b are new in 2.0.0.
+# Analyser 1.x rule ID -> current rule ID (GS IDs did not change). -IncludeRule / -ExcludeRule translate these,
+# and the HTML report shows them and carries 1.x rule-filter choices over. Each maps straight to the current ID
+# (RN21 -> RC16, not via RX10), so a translation never chains. RC14a / RC14b (2.0.0) and RC15 (2.1.0) are new.
 $OldRuleIds = [ordered]@{
     RN01 = 'RC01'; RN02 = 'RC02'; RN03 = 'RC03'; RN04 = 'RC06a'; RN05 = 'RC07'; RN06 = 'RX01'; RN07 = 'RX02'
     RN08 = 'RX03'; RN09 = 'RC08'; RN10 = 'JS01'; RN11 = 'JS02'; RN12 = 'JS03'; RN13 = 'JS04'; RN14 = 'JS05'
-    RN15 = 'RX05'; RN16 = 'RX06'; RN17 = 'RX07'; RN18 = 'RX08'; RN19 = 'RX09'; RN20 = 'RX04'; RN21 = 'RX10'
+    RN15 = 'RX05'; RN16 = 'RX06'; RN17 = 'RX07'; RN18 = 'RX08'; RN19 = 'RX09'; RN20 = 'RX04'; RN21 = 'RC16'
     RN22 = 'RC10'; RN23 = 'RC04'; RN24 = 'RC09'; RN25 = 'RC11'; RN26 = 'RC12'; RN27 = 'RC06b'; RN28 = 'RC13'
 }
 $OldRuleIdOf = @{}; foreach ($o in $OldRuleIds.Keys) { $OldRuleIdOf[$OldRuleIds[$o]] = $o }
+# 2.x and later IDs retired when a rule moved (an RX rule that the article took in) -> current ID. Never reused.
+$RetiredRuleIds = [ordered]@{ RX10 = 'RC16' }
+$RetiredRuleIdOf = @{}; foreach ($o in $RetiredRuleIds.Keys) { $RetiredRuleIdOf[$RetiredRuleIds[$o]] = @($RetiredRuleIdOf[$RetiredRuleIds[$o]]) + $o | Where-Object { $_ } }
 
 # RC14a: aggregate names in the Geo SCADA 2025 R2 (88.9742.1) database schema - every aggregate of every class,
 # with the drivers installed on the test system. $AggregatesAlsoProperties are property names too, so they count
@@ -680,7 +698,8 @@ function Test-IsJs([string]$Language) { return $Language -in @('JScript', 'JScri
 
 function Get-ParamNames([string]$List) {
     <# "ByVal a, b = 1, ...rest" -> a, b, rest (parameter names only). #>
-    return , ([string[]]@($List -split ',' | ForEach-Object { ($_ -replace '(?i)^\s*(ByVal|ByRef)\s+', '' -replace '=.*$', '' -replace '^\s*\.\.\.', '').Trim() } | Where-Object { $_ }))
+    # "arr()" is a VBScript array parameter: the name is "arr"
+    return , ([string[]]@($List -split ',' | ForEach-Object { ($_ -replace '(?i)^\s*(ByVal|ByRef)\s+', '' -replace '=.*$', '' -replace '^\s*\.\.\.', '' -replace '\(\s*\)?\s*$', '').Trim() } | Where-Object { $_ }))
 }
 
 function Get-FunctionDefs([string]$Code, [string]$Language) {
@@ -692,7 +711,8 @@ function Get-FunctionDefs([string]$Code, [string]$Language) {
         foreach ($m in [regex]::Matches($Code, '\b(?:var|let|const)?\s*([A-Za-z_$][\w$]*)\s*=\s*function\s*\(([^)]*)\)')) { $defs[$m.Groups[1].Value] = Get-ParamNames $m.Groups[2].Value }
         foreach ($m in [regex]::Matches($Code, '\b(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(([^)]*)\)\s*=>')) { $defs[$m.Groups[1].Value] = Get-ParamNames $m.Groups[2].Value }
     } else {
-        foreach ($m in [regex]::Matches($Code, '(?im)^[ \t]*(?:(?:Public|Private)\s+)?(?:Default\s+)?(?:Sub|Function)\s+([A-Za-z_]\w*)\s*(?:\(([^)]*)\))?')) {
+        # the parameter list may hold array parameters, "arr()", so an empty () inside it does not end it
+        foreach ($m in [regex]::Matches($Code, '(?im)^[ \t]*(?:(?:Public|Private)\s+)?(?:Default\s+)?(?:Sub|Function)\s+([A-Za-z_]\w*)\s*(?:\(((?:[^()]|\(\s*\))*)\))?')) {
             $defs[$m.Groups[1].Value.ToLowerInvariant()] = Get-ParamNames $m.Groups[2].Value
         }
     }
@@ -1178,16 +1198,52 @@ function Invoke-BodyRules($Ctx) {
         foreach ($m in [regex]::Matches($code, '\bForm\s*\.\s*Init\s*\(')) { Add-BodyFinding 'RX08' $Ctx $m.Index 'Form layout' }
     }
 
-    # RX10 GetRegistry(key) without a default: Null / empty when the key is not set
+    # RC16 (RX10 in 2.x) GetRegistry(key) without a default: Null when the key is not set. Not reported for the
+    # article's own fix (VBScript): a = GetRegistry("Key") with a tested by IsNull(a) later in the same procedure.
+    $regProcs = $null
     foreach ($m in [regex]::Matches($code, '(?<![\w$])(?:App\s*\.\s*)?GetRegistry\s*\(', $opt)) {
         $open = $m.Index + $m.Length - 1
         $close = [GeoScadaScriptScan]::MatchParen($code, $open)
         if ($close -lt 0 -or [GeoScadaScriptScan]::CountArgs($code, $open, $close) -ne 1) { continue }
+        if (-not $isJs) {
+            $ls = $code.LastIndexOfAny([char[]]"`n:", [Math]::Max(0, $m.Index - 1)) + 1
+            if ($ls -le $m.Index -and $code.Substring($ls, $m.Index - $ls) -match '^\s*(\w+)\s*=\s*$') {
+                $var = $Matches[1]
+                if ($null -eq $regProcs) { $regProcs = (Get-VbsDeclarations $code).Procs.ToArray() }
+                $proc = $regProcs | Where-Object { $m.Index -ge $_.Start -and $m.Index -le $_.End } | Select-Object -First 1
+                $to = if ($proc) { $proc.End } else { $code.Length }
+                if ($to -gt $close -and $code.Substring($close, $to - $close) -match "(?i)\bIsNull\s*\(\s*$([regex]::Escape($var))\s*\)") { continue }
+            }
+        }
         $before = $code.Substring([Math]::Max(0, $m.Index - 40), [Math]::Min(40, $m.Index))
         if ($before -match '(?i)\b(CLng|CInt|CDbl|CSng|CBool|CDate|CByte|CCur|Int|Fix|Abs|DateValue|TimeValue|parseInt|parseFloat|Number)\s*\(\s*$') {
-            Add-BodyFinding 'RX10' $Ctx $m.Index "GetRegistry with no default, converted with $($Matches[1])()" 'Error'
+            Add-BodyFinding 'RC16' $Ctx $m.Index "GetRegistry with no default, converted with $($Matches[1])()" 'Error'
         } else {
-            Add-BodyFinding 'RX10' $Ctx $m.Index 'GetRegistry with no default value'
+            Add-BodyFinding 'RC16' $Ctx $m.Index 'GetRegistry with no default value'
+        }
+    }
+
+    # RC15 testing for an aggregate: Set y = obj.Interface.<Aggregate> (VBScript). The article (#15) says to omit
+    # the Set and test with IsObject. Error when y is then tested with Is Nothing in the same procedure - the
+    # pattern the article replaces; Warning otherwise. GISLocation is on every object, so it is never absent.
+    # Names that are also properties (Shared ...) are left out: a Set of one of those is not an aggregate.
+    if (-not $isJs) {
+        $aggSets = [regex]::Matches($code, '(?im)(?:^|:)[ \t]*Set[ \t]+(\w+)[ \t]*=[ \t]*[^\r\n:=]*?\.[ \t]*Interface[ \t]*\.[ \t]*(\w+)[ \t]*(?=\r?$|:)')
+        $aggProcs = $null
+        foreach ($m in $aggSets) {
+            $agg = $m.Groups[2].Value
+            if (-not $script:AggregateSet.Contains($agg) -or $script:AggregatePropertySet.Contains($agg) -or $agg -ieq 'GISLocation') { continue }
+            if ($null -eq $aggProcs) { $aggProcs = (Get-VbsDeclarations $code).Procs.ToArray() }
+            $var = $m.Groups[1].Value
+            $proc = $aggProcs | Where-Object { $m.Index -ge $_.Start -and $m.Index -le $_.End } | Select-Object -First 1
+            $to = if ($proc) { $proc.End } else { $code.Length }
+            $tail = $code.Substring($m.Index + $m.Length, [Math]::Max(0, $to - $m.Index - $m.Length))
+            $pos = $code.IndexOf('Set', $m.Index, [StringComparison]::OrdinalIgnoreCase)    # the match may start at ':'
+            if ($tail -match "(?i)(?<![\w.])$([regex]::Escape($var))\s+Is\s+Nothing\b") {
+                Add-BodyFinding 'RC15' $Ctx $pos "Set $var = ...Interface.$agg, then '$var Is Nothing' - in 2025 R2 use: $var = ...Interface.$agg : If Not IsObject($var) Then"
+            } else {
+                Add-BodyFinding 'RC15' $Ctx $pos "Set $var = ...Interface.$agg - the article says not to Set an aggregate in 2025 R2 (it may be absent on some objects); use $var = ... and IsObject($var)" 'Warning'
+            }
         }
     }
 
@@ -1225,7 +1281,10 @@ function Invoke-BodyRules($Ctx) {
     # Logon through ViewX COM automation - a variable set from CreateObject("Serck.ViewXApplication"), or the
     # call chained on directly (V8 has no COM: RX05 covers CreateObject there). Form.Logon is not covered.
     $logons = [ordered]@{}                                              # position -> @(end of the name, what)
-    foreach ($m in [regex]::Matches($code, '(?<![\w$.])App\s*\.\s*(LogOnUser|LogOffUser|LogOn|LogOff)\b', $opt)) {   # JS: exact case (a wrong case is JS02's)
+    # The method name in any case, in every language: the ViewX type library spells them Logon / Logoff while the
+    # article writes LogOn / LogOff, and the script stops either way (in JS a wrong case is also JS02's). The object
+    # follows the language: in JS "App" is exact, since "app" is a script's own variable.
+    foreach ($m in [regex]::Matches($code, '(?<![\w$.])App\s*\.\s*(?i:(LogOnUser|LogOffUser|LogOn|LogOff))\b', $opt)) {
         $logons[[string]$m.Index] = @(($m.Index + $m.Length), "App.$($m.Groups[1].Value)")
     }
     if (-not $isV8) {
@@ -1298,8 +1357,8 @@ if (-not (Test-Path -LiteralPath $InputFolder -PathType Container)) { throw "Inp
 if ([string]::IsNullOrWhiteSpace($OutputFolder)) { $OutputFolder = $InputFolder }
 $OutputFolder = [System.IO.Path]::GetFullPath($OutputFolder)
 if (-not (Test-Path -LiteralPath $OutputFolder)) { New-Item -ItemType Directory -Path $OutputFolder -Force | Out-Null }
-# Rule IDs: a 1.x ID (RN01-RN28) is translated to its 2.0.0 ID; anything else must be a current rule ID.
-# A comma list arrives as one string through powershell -File, so it is split here.
+# Rule IDs: a 1.x ID (RN01-RN28) or a retired ID (RX10) is translated to its current ID; anything else must be
+# a current rule ID. A comma list arrives as one string through powershell -File, so it is split here.
 function Resolve-RuleIds([string[]]$Ids, [string]$Param) {
     foreach ($r in @($Ids | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() })) {
         if (-not $r) { continue }
@@ -1307,8 +1366,12 @@ function Resolve-RuleIds([string[]]$Ids, [string]$Param) {
             $new = $OldRuleIds[$r]
             Write-Host "$Param $r is the analyser 1.x ID of $new (rule IDs changed in 2.0.0) - using $new." -ForegroundColor Yellow
             $new
+        } elseif ($RetiredRuleIds.Contains($r)) {
+            $new = $RetiredRuleIds[$r]
+            Write-Host "$Param $r is a retired rule ID: the rule is now $new (the article added it) - using $new." -ForegroundColor Yellow
+            $new
         } elseif ($Rules.Contains($r)) { $r }
-        else { throw "Unknown rule '$r' in $Param. Rules: $($Rules.Keys -join ', '), or a 1.x ID (RN01-RN28)." }
+        else { throw "Unknown rule '$r' in $Param. Rules: $($Rules.Keys -join ', '), a 1.x ID (RN01-RN28) or a retired ID ($($RetiredRuleIds.Keys -join ', '))." }
     }
 }
 $IncludeRule = @(Resolve-RuleIds $IncludeRule '-IncludeRule')
@@ -1762,7 +1825,9 @@ if (-not $NoHtml) {
              elseif ($SkipProgIdCheck -and $k -in 'RX01', 'RX02') { 'Not run: -SkipProgIdCheck' }
              elseif ($SeverityRank[$Rules[$k].Severity] -gt $minRank) { "Not reported: its severity is below -MinimumSeverity $MinimumSeverity" }
              else { '' }
-        $rulesJson[$k] = @{ s = $Rules[$k].Severity; t = $Rules[$k].Title; f = $Rules[$k].Fix; r = $Rules[$k].Ref; x = $x; o = [string]$OldRuleIdOf[$k] }
+        # o: the 1.x ID; p: retired 2.x+ IDs of the same rule (comma-separated), e.g. RC16 was RX10
+        $rulesJson[$k] = @{ s = $Rules[$k].Severity; t = $Rules[$k].Title; f = $Rules[$k].Fix; r = $Rules[$k].Ref; x = $x; o = [string]$OldRuleIdOf[$k]
+                            p = [string](@($RetiredRuleIdOf[$k]) -join ',') }
     }
     $rows = New-Object System.Collections.Generic.List[object]
     foreach ($f in $sorted) { $rows.Add([object[]]@([string]$f.Severity, [string]$f.Rule, [string]$f.FullName, [string]$f.Class, [string]$f.Language, [string]$f.ScriptLine, [string]$f.FileLine, [string]$f.Code, [string]$f.Detail, [int]$f.InstancesFixed, [string]$f.File, [string]$f.Section, [string]$f.Role)) }
@@ -1875,18 +1940,19 @@ var agg={};rows.forEach(function(r){var a=agg[r[1]]||(agg[r[1]]={n:0,o:{}});a.n+
 // so the complete picture is shown - 0 means checked with nothing found; a rule that did not run shows a dash
 // and why (R[k].x). Unticked rules are remembered in this browser, so rules that will not be fixed stay hidden
 // next time. 2.0.0 saves under a new key; the first time, choices saved by a 1.x report are carried over
-// through each rule's 1.x ID (R[k].o).
-var PREFIX={RC:0,JS:1,RX:2,GS:3},OLD={};Object.keys(R).forEach(function(k){if(R[k].o)OLD[R[k].o]=k;});
+// through each rule's 1.x ID (R[k].o). A retired ID (R[k].p, e.g. RX10 -> RC16) is translated the same way.
+var PREFIX={RC:0,JS:1,RX:2,GS:3},OLD={};Object.keys(R).forEach(function(k){if(R[k].o)OLD[R[k].o]=k;if(R[k].p)R[k].p.split(',').forEach(function(p){OLD[p]=k;});});
+function was(k){return [R[k].p,R[k].o].filter(Boolean).join(', ');}
 function ruleCmp(a,b){var pa=a.slice(0,2),pb=b.slice(0,2);if(pa!==pb){var ia=pa in PREFIX?PREFIX[pa]:9,ib=pb in PREFIX?PREFIX[pb]:9;return ia!==ib?ia-ib:(pa<pb?-1:1);}return a.localeCompare(b,undefined,{numeric:true});}
 var ruleIds=Object.keys(R).sort(ruleCmp);
 ruleIds.forEach(function(k){if(!agg[k])agg[k]={n:0,o:{}};});
 var ruleOn={},ruleBox={},ruleRow={},KEY='GeoSCADA-Script-Analyser.rulesOff.v2',off=[];
 try{var saved=localStorage.getItem(KEY);
  if(saved===null)off=(JSON.parse(localStorage.getItem('GeoSCADA-Script-Analyser.rulesOff')||'[]')||[]).map(function(k){return OLD[k]||k;});
- else off=JSON.parse(saved)||[];}catch(e){off=[];}
+ else off=(JSON.parse(saved)||[]).map(function(k){return R[k]?k:(OLD[k]||k);});}catch(e){off=[];}
 ruleIds.forEach(function(k){ruleOn[k]=off.indexOf(k)<0;});
 function saveRules(){try{var prev=JSON.parse(localStorage.getItem(KEY)||'[]')||[];
- var now=prev.filter(function(k){return !R[k];}).concat(ruleIds.filter(function(k){return !ruleOn[k];}));localStorage.setItem(KEY,JSON.stringify(now));}catch(e){}}
+ var now=prev.filter(function(k){return !R[k]&&!OLD[k];}).concat(ruleIds.filter(function(k){return !ruleOn[k];}));localStorage.setItem(KEY,JSON.stringify(now));}catch(e){}}
 function syncRules(){var n=0;ruleIds.forEach(function(k){ruleBox[k].checked=ruleOn[k];ruleRow[k].classList.toggle('off',!ruleOn[k]);if(ruleOn[k])n++;});
  document.getElementById('rulesum').textContent=n===ruleIds.length?'All rules':n===0?'No rules':n===1?ruleIds.filter(function(k){return ruleOn[k];})[0]:n+' of '+ruleIds.length+' rules';}
 function setRules(f){ruleIds.forEach(function(k){ruleOn[k]=f(k);});syncRules();saveRules();shown=200;render();}
@@ -1896,7 +1962,7 @@ ruleIds.forEach(function(k){
  var a=agg[k],x=R[k].x,tr=el('tr','rule'+(x?' notrun':a.n?'':' zero')),aff=0,on=Object.keys(a.o);on.forEach(function(o){aff+=1+obj(o)[2];});
  stat[k]=x?[rank[R[k].s],k,R[k].t,-1,-1,-1]:[rank[R[k].s],k,R[k].t,a.n,on.length,aff];     // not run sorts below 0
  var td=el('td');td.appendChild(el('span','pill '+R[k].s,R[k].s));tr.appendChild(td);
- var tk=el('td',null,k);if(R[k].o){var was=el('div','sub was','was '+R[k].o);was.title='Rule ID in analyser 1.x';tk.appendChild(was);}tr.appendChild(tk);
+ var tk=el('td',null,k);if(was(k)){var wd=el('div','sub was','was '+was(k));wd.title='Earlier rule ID(s): '+(R[k].p?R[k].p+' (retired in a later analyser version)':'')+(R[k].p&&R[k].o?'; ':'')+(R[k].o?R[k].o+' (analyser 1.x)':'');tk.appendChild(wd);}tr.appendChild(tk);
  var tt=el('td');tt.appendChild(el('div',null,R[k].t));if(x)tt.appendChild(el('div','notrunwhy',x));tt.appendChild(el('div','fix',R[k].f+(R[k].r?' ['+R[k].r+']':'')));tr.appendChild(tt);
  [a.n,on.length,aff].forEach(function(v){tr.appendChild(el('td',null,x?'—':String(v)));});
  tr.title='Show only '+k;tr.addEventListener('click',function(){setRules(function(x){return x===k;});document.getElementById('q').scrollIntoView();});rb.appendChild(tr);ruleRow[k]=tr;});
@@ -1913,7 +1979,7 @@ sortRules();
 var rl=document.getElementById('rulelist');
 ruleIds.forEach(function(k){var lb=el('label'),cb=el('input');cb.type='checkbox';
  cb.addEventListener('change',function(){ruleOn[k]=cb.checked;syncRules();saveRules();shown=200;render();});
- lb.appendChild(cb);lb.appendChild(el('b',R[k].s,k));lb.appendChild(el('span',null,R[k].t));lb.appendChild(el('span','sub',R[k].x?'(not run)':'('+agg[k].n+')'));var tip=[R[k].o?'Was '+R[k].o+' in analyser 1.x.':'',R[k].x||''].filter(Boolean).join(' ');if(tip)lb.title=tip;rl.appendChild(lb);ruleBox[k]=cb;});
+ lb.appendChild(cb);lb.appendChild(el('b',R[k].s,k));lb.appendChild(el('span',null,R[k].t));lb.appendChild(el('span','sub',R[k].x?'(not run)':'('+agg[k].n+')'));var tip=[was(k)?'Was '+was(k)+'.':'',R[k].x||''].filter(Boolean).join(' ');if(tip)lb.title=tip;rl.appendChild(lb);ruleBox[k]=cb;});
 document.querySelectorAll('#rulepick .pickbtns button').forEach(function(b){b.addEventListener('click',function(){var p=b.getAttribute('data-p');
  setRules(function(k){return p==='all'?true:p==='none'?false:k.slice(0,2)===p;});});});
 syncRules();
@@ -1956,7 +2022,7 @@ function render(){
  var q=document.getElementById('q').value.toLowerCase(),lg=langSel.value;
  var groups={},order=[];
  rows.forEach(function(r){if(!sevOn[r[0]])return;if(!ruleOn[r[1]])return;if(lg&&r[4]!==lg)return;if(!roleOn[obj(r[2])[1]])return;
-  if(q&&(r[2]+' '+r[7]+' '+r[8]+' '+r[1]+' '+(R[r[1]]?R[r[1]].o:'')).toLowerCase().indexOf(q)<0&&!(I[r[2]]&&I[r[2]].some(function(n){return n.toLowerCase().indexOf(q)>=0;})))return;
+  if(q&&(r[2]+' '+r[7]+' '+r[8]+' '+r[1]+' '+(R[r[1]]?was(r[1]):'')).toLowerCase().indexOf(q)<0&&!(I[r[2]]&&I[r[2]].some(function(n){return n.toLowerCase().indexOf(q)>=0;})))return;
   if(!groups[r[2]]){groups[r[2]]=[];order.push(r[2]);}groups[r[2]].push(r);});
  order.sort(function(a,b){return obj(a)[0]-obj(b)[0]||a.localeCompare(b);});
  var list=document.getElementById('list');list.textContent='';

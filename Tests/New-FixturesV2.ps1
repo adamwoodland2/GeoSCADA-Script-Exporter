@@ -41,16 +41,56 @@ New-FixtureV2 'T2.V8 Code' 'JavaScriptV8' @('PickAction: 1 | L[Layer]/B[Button] 
     @{ Id = 1; Code = "MsgBox(""hi"");                                        // EXPECT:RX06" })
 
 New-FixtureV2 'T2.Registry' 'VBScript' @() ("Sub Score()`r`n" +
-"    OldScore = CLng(GetRegistry( ""SameGameScore"") )            ' EXPECT:RX10`r`n" +
-"    OldScore = CLng(GetRegistry( ""SameGameScore"", 0) )         ' NOT:RX10`r`n" +
-"    BestScore = CLng(App.GetRegistry(""SameGameBestScore""))     ' EXPECT:RX10`r`n" +
-"    s = GetRegistry(""Name"")                                     ' EXPECT:RX10`r`n" +
-"    t = GetRegistry(""Name"", """")                               ' NOT:RX10`r`n" +
-"    ' x = CLng(GetRegistry(""InComment""))                         NOT:RX10`r`n" +
-"    m = ""CLng(GetRegistry(""""InString""""))""                     ' NOT:RX10`r`n" +
+"    OldScore = CLng(GetRegistry( ""SameGameScore"") )            ' EXPECT:RC16`r`n" +
+"    OldScore = CLng(GetRegistry( ""SameGameScore"", 0) )         ' NOT:RC16`r`n" +
+"    BestScore = CLng(App.GetRegistry(""SameGameBestScore""))     ' EXPECT:RC16`r`n" +
+"    s = GetRegistry(""Name"")                                     ' EXPECT:RC16`r`n" +
+"    t = GetRegistry(""Name"", """")                               ' NOT:RC16`r`n" +
+"    ' x = CLng(GetRegistry(""InComment""))                         NOT:RC16`r`n" +
+"    m = ""CLng(GetRegistry(""""InString""""))""                     ' NOT:RC16`r`n" +
+"End Sub`r`n" +
+"Sub ArticleFix()`r`n" +
+"    a = GetRegistry(""newkey"")                                   ' NOT:RC16`r`n" +
+"    If IsNull(a) Then`r`n" +
+"        MsgBox """"`r`n" +
+"    Else`r`n" +
+"        MsgBox a`r`n" +
+"    End If`r`n" +
+"End Sub`r`n" +
+"Sub ArticleBefore()`r`n" +
+"    a = GetRegistry(""newkey"")                                   ' EXPECT:RC16`r`n" +
+"    MsgBox a`r`n" +
+"End Sub`r`n" +
+"Sub NullTestElsewhere()`r`n" +
+"    b = GetRegistry(""k"")                                        ' EXPECT:RC16`r`n" +
+"    If IsNull(c) Then MsgBox ""other variable""`r`n" +
+"End Sub") @()
+
+# RC15: testing for an aggregate (article #15). Error with an Is Nothing test, Warning for any other Set.
+New-FixtureV2 'T2.Aggregate' 'VBScript' @() ("Sub Before()`r`n" +
+"    sPtFullName = ""Test.Point""`r`n" +
+"    set pControl = Server.FindObject(sPtFullName)`r`n" +
+"    Set y = pControl.Interface.Control                          ' EXPECT:RC15`r`n" +
+"    If y Is Nothing Then`r`n" +
+"        MsgBox ""Has No Control""`r`n" +
+"    End If`r`n" +
+"End Sub`r`n" +
+"Sub After()`r`n" +
+"    set pControl = Server.FindObject(""Test.Point"")`r`n" +
+"    y = pControl.Interface.Control                              ' NOT:RC15`r`n" +
+"    If not IsObject(y) Then MsgBox ""Has No Control""          ' NOT:RC09`r`n" +
+"End Sub`r`n" +
+"Sub Others()`r`n" +
+"    Set h = Server.FindObject(""A"").Interface.Historic          ' EXPECT:RC15`r`n" +
+"    Set g = Server.ThisObject.Interface.GISLocation            ' NOT:RC15`r`n" +
+"    Set s = obj.Interface.Shared                               ' NOT:RC15`r`n" +
+"    Set c = obj.Interface.Control.ControlMaximum               ' NOT:RC15`r`n" +
+"    Set i = obj.Interface                                      ' NOT:RC15`r`n" +
+"    x = 1 : Set k = obj.Interface.ScanParams                   ' EXPECT:RC15`r`n" +
+"    ' Set z = obj.Interface.Control                              NOT:RC15`r`n" +
 "End Sub") @()
 
 New-FixtureV2 'T2.Registry JS' 'JavaScriptV8' @() ("function f() {`r`n" +
-"    let n = parseInt(GetRegistry(""Count""));                    // EXPECT:RX10`r`n" +
-"    let m = parseInt(GetRegistry(""Count"", ""0""));              // NOT:RX10`r`n" +
+"    let n = parseInt(GetRegistry(""Count""));                    // EXPECT:RC16`r`n" +
+"    let m = parseInt(GetRegistry(""Count"", ""0""));              // NOT:RC16`r`n" +
 "}") @()

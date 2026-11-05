@@ -12,12 +12,36 @@ The export **file format** has its own number, `FormatVersion`, written in every
 when the layout of the files changes. The analyser reads every format up to its `$SupportedFormat`, and reports
 newer ones as `UnsupportedFormat`.
 
-Every exported file records the exporter that wrote it (`Exporter: GeoSCADA-Script-Exporter 1.1.0`) and its
+Every exported file records the exporter that wrote it (`Exporter: GeoSCADA-Script-Exporter 1.1.1`) and its
 `FormatVersion`. The analyser reports which exporter versions and formats it read, and its own version. These
 appear on the console, in the HTML report header, and in the `ExporterVersion`, `FormatVersion` and
 `AnalyserVersion` columns of `_ScriptAnalysis.csv`.
 
 ## GeoSCADA-Script-Analyser
+
+### 2.1.0 (2026-11-05)
+
+**RX10 is now RC16.** The Knowledge Base article's 2026-11-05 update added item 16, "GetRegistry returns Null if there is no default", which is what RX10 checked. Following the rule-ID scheme, the rule moves to its article number. **RX10 is retired and will never be used for another rule.** The CSV columns are unchanged; these findings show `RC16` in the `Rule` column, and everywhere a rule ID is accepted, RX10 is still understood:
+
+| Retired | Now |
+| ------- | --- |
+| RX10 | RC16 |
+
+- `-IncludeRule` / `-ExcludeRule` accept the retired ID and translate it, with a note on the console (`-ExcludeRule RX10 is a retired rule ID: the rule is now RC16 ...`). The 1.x ID RN21 now translates straight to RC16.
+- The HTML report shows "was RX10, RN21" for RC16. Search finds the rule by either old ID, and a rule-filter choice saved for RX10 carries over to RC16.
+- **RC16** also no longer reports the article's own fix: a VBScript variable assigned from `GetRegistry("Key")` and tested with `IsNull(variable)` later in the same procedure.
+
+**New rule, RC15 (Error / Warning)**, from the article's new item 15, "Changes to checking an Aggregate, e.g. to test for Controls". Before 2025 R2 a script could test whether an object has an aggregate with `Set y = obj.Interface.Control` and `If y Is Nothing Then`. In 2025 R2 the article says to omit the `Set` and test with `IsObject(y)`. RC15 reports a VBScript `Set` of `… .Interface.<aggregate>`: an Error when the variable is then tested with `Is Nothing` in the same procedure, and a Warning otherwise. `GISLocation`, which every object has, is not reported.
+
+**Fixes**
+
+- **RC13 now finds `App.Logon` / `App.Logoff` in JScript and JavaScript V8.** It matched only the article's spelling, `App.LogOn` / `App.LogOff`, exactly. The ViewX type library spells them `Logon` / `Logoff`, so correctly written JS calls were missed. It now matches any case in every language. A wrong case in JS is still reported by JS02.
+- **RC12 false positive on array parameters.** For `Sub F(vals(), n)` the parameter was read as `vals(`, which never matched the pick action's `vals <= …`, and the parameters after it were lost. Array parameters are now read correctly.
+
+**Other changes**
+
+- **References:** RC06b cites the article's own statement that a list box scrolls horizontally. JS01–JS04 cite the article's new item numbers, J1–J4. The article check date is 2026-11-05.
+- **Examples:** `Rule-Examples-VBScript.vbs` has an RC15 pair, which uses the RC01 `Test Analog` point (it should have no control configured), and the RX10 pair is renamed RC16.
 
 ### 2.0.0 (2026-11-04)
 
@@ -109,6 +133,11 @@ First published version.
 - **Output:** findings, actions, instances and export-check CSVs, with a spreadsheet formula guard, plus an interactive HTML report.
 
 ## GeoSCADA-Script-Exporter
+
+### 1.1.1 (2026-11-05), FormatVersion 2
+
+- **One bad object no longer ends the export.** The template lookup and header building for each mimic and script library ran outside the per-object error handling. An unexpected failure there stopped the whole run, with no manifest. It is now reported like any other failure: an `Error` row in the manifest, a warning, and exit code 2 (or a stop with `-FailOnError`).
+- **Faster library export.** The library loop updated the progress bar for every library, bypassing the 2-second throttle used everywhere else. In some hosts each update takes about 2 seconds.
 
 ### 1.1.0 (2026-10-15), FormatVersion 2
 

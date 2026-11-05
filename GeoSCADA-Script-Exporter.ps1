@@ -149,7 +149,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$ExporterVersion = '1.1.0'
+$ExporterVersion = '1.1.1'
 $FormatVersion   = 2
 
 # Resolve the output path here (not in the param default) so it works even when
@@ -782,50 +782,53 @@ try {
         $stats.MissingLibraryLinks += $missing.Count
         if ($hasOwn) { $stats.MimicsWithOwnScript++ }
 
-        $lang = Get-LanguageInfo $info.LangGuid
-        if (-not $info.HasScriptElement) { $lang = @{ Name = 'None'; Comment = "'"; Guid = ''; Defaulted = $false } }
-        $code = ConvertTo-CrLf $info.Script
-        $src  = Resolve-EditableSource $webDoc.Details
-        $e = New-Object System.Collections.ArrayList
-        Add-CommonEntries $e $m $lang 'GetWebDocumentContent'
-        Add-TemplateEntries $e $m $src
-        Add-Entry $e 'HasOwnScript' $hasOwn
-        Add-Entry $e 'ScriptLines'  (Get-LineCount $code)
-        Add-Entry $e 'ScriptChars'  $code.Length
-        Add-Entry $e 'LibraryCount' $info.Libraries.Count
-        foreach ($l in $info.Libraries) { Add-Entry $e 'Library' $l }
-        Add-Entry $e 'LibraryCheck' $(if (-not $CheckMissingLibraries) { 'NotPerformed (XML lists only libraries that exist)' } elseif ($checkNote) { "Incomplete: $checkNote" } else { 'Performed' })
-        foreach ($l in $missing) { Add-Entry $e 'LibraryMissing' $l }
-        Add-Entry $e 'PickActionCount' $info.PickActions.Count
-        # Seven ' | '-separated fields: N | Where | Action | Type | Context | Function | Args. Args is last so it
-        # may itself contain ' | '. Inline code (Function "(code)") is written to section N after the script.
-        $sections = New-Object System.Collections.Generic.List[object]
-        $k = 0
-        foreach ($p in $info.PickActions) {
-            $k++
-            Add-Entry $e 'PickAction' ("{0} | {1} | {2} | {3} | {4} | {5} | {6}" -f $k, (Format-Field $p.Where), (Format-Field $p.Action), $p.Type, $p.Context,
-                                       (Format-Field $p.Function), $(if ($p.Args) { $p.Args } else { '(none)' }))
-            if ($null -ne $p.Code) { $sections.Add(@{ Id = $k; Code = $p.Code }); $stats.PickActionCode++ }
-        }
-        # Embedded mimics: Where | full name (relative references resolved; "(animated)" when set by animation).
-        Add-Entry $e 'EmbeddedMimicCount' $info.Embeds.Count
-        foreach ($em in $info.Embeds) {
-            $target = Resolve-MimicRef $em.Ref $m.FullName
-            Add-Entry $e 'EmbeddedMimic' ("{0} | {1}" -f (Format-Field $em.Where), $(if ($target) { $target } else { '(animated)' }))
-        }
-
+        # Everything from here to the manifest row is one step: an object whose template lookup, header or
+        # file write fails becomes an Error row (exit code 2) instead of ending the whole export.
         try {
+            $lang = Get-LanguageInfo $info.LangGuid
+            if (-not $info.HasScriptElement) { $lang = @{ Name = 'None'; Comment = "'"; Guid = ''; Defaulted = $false } }
+            $code = ConvertTo-CrLf $info.Script
+            $src  = Resolve-EditableSource $webDoc.Details
+            $e = New-Object System.Collections.ArrayList
+            Add-CommonEntries $e $m $lang 'GetWebDocumentContent'
+            Add-TemplateEntries $e $m $src
+            Add-Entry $e 'HasOwnScript' $hasOwn
+            Add-Entry $e 'ScriptLines'  (Get-LineCount $code)
+            Add-Entry $e 'ScriptChars'  $code.Length
+            Add-Entry $e 'LibraryCount' $info.Libraries.Count
+            foreach ($l in $info.Libraries) { Add-Entry $e 'Library' $l }
+            Add-Entry $e 'LibraryCheck' $(if (-not $CheckMissingLibraries) { 'NotPerformed (XML lists only libraries that exist)' } elseif ($checkNote) { "Incomplete: $checkNote" } else { 'Performed' })
+            foreach ($l in $missing) { Add-Entry $e 'LibraryMissing' $l }
+            Add-Entry $e 'PickActionCount' $info.PickActions.Count
+            # Seven ' | '-separated fields: N | Where | Action | Type | Context | Function | Args. Args is last so it
+            # may itself contain ' | '. Inline code (Function "(code)") is written to section N after the script.
+            $sections = New-Object System.Collections.Generic.List[object]
+            $k = 0
+            foreach ($p in $info.PickActions) {
+                $k++
+                Add-Entry $e 'PickAction' ("{0} | {1} | {2} | {3} | {4} | {5} | {6}" -f $k, (Format-Field $p.Where), (Format-Field $p.Action), $p.Type, $p.Context,
+                                           (Format-Field $p.Function), $(if ($p.Args) { $p.Args } else { '(none)' }))
+                if ($null -ne $p.Code) { $sections.Add(@{ Id = $k; Code = $p.Code }) }
+            }
+            # Embedded mimics: Where | full name (relative references resolved; "(animated)" when set by animation).
+            Add-Entry $e 'EmbeddedMimicCount' $info.Embeds.Count
+            foreach ($em in $info.Embeds) {
+                $target = Resolve-MimicRef $em.Ref $m.FullName
+                Add-Entry $e 'EmbeddedMimic' ("{0} | {1}" -f (Format-Field $em.Where), $(if ($target) { $target } else { '(animated)' }))
+            }
+
             $file = Get-ExportFileName -FullName $m.FullName -Id $m.Id
             Write-TextFile -Path (Join-Path $OutputFolder $file) -Text (New-ExportText -Comment $lang.Comment -Entries $e -Script $code -Sections $sections)
             [void]$written.Add($file)
             $stats.MimicFiles++
+            $stats.PickActionCode += $sections.Count
             Add-ManifestRow -Obj $m -Status 'Exported' -Message $checkNote -Extra @{
                 File = $file; Language = $lang.Name; LanguageGuid = $lang.Guid; ScriptLines = (Get-LineCount $code); ScriptChars = $code.Length
                 HasOwnScript = $hasOwn; LibraryCount = $info.Libraries.Count; Libraries = ($info.Libraries -join '; ')
                 MissingLibraries = ($missing -join '; '); PickActionCount = $info.PickActions.Count
                 ControlledByInstance = $src.Controlled; DocumentContentOverride = $src.Override
                 EditableSource = $src.Source; EditableSourceId = $src.SourceId }
-        } catch { Register-Failure $m 'Writing file' $_ }
+        } catch { Register-Failure $m 'Exporting mimic' $_ }
     }
     Write-Progress -Activity 'Exporting mimic scripts' -Completed
 
@@ -834,31 +837,35 @@ try {
         $i = 0
         foreach ($l in $libraries) {
             $i++
-            Write-Progress -Activity 'Exporting script libraries' -Status "$i of $($libraries.Count): $($l.FullName)" -PercentComplete ([int](100 * $i / [Math]::Max(1, $libraries.Count)))
+            if ($i % 25 -eq 1 -or $i -eq $libraries.Count) {
+                Show-Progress 'Exporting script libraries' "$i of $($libraries.Count): $($l.FullName)" ([int](100 * $i / [Math]::Max(1, $libraries.Count)))
+            }
             try {
                 $libSrc = [string]$script:Conn.GetObject((New-Object ClearScada.Client.ObjectId($l.Id))).InvokeMethod('GetScriptSource', [object[]]@())
                 $libDoc = Get-Document -Id $l.Id
                 $guid   = [GeoScadaScriptDoc]::LibraryLanguageGuid($libDoc.Bytes)
             } catch { Register-Failure $l 'Reading script library' $_; continue }
-            $src = Resolve-EditableSource $libDoc.Details
 
-            $lang = if ($guid) { Get-LanguageInfo $guid } else { @{ Name = 'Unknown'; Comment = '//'; Guid = ''; Defaulted = $false } }
-            $refs = if ($SkipMimics) { '' } else { [int]$libraryUse[$l.FullName] }
-            $tmplCols = @{ ControlledByInstance = $src.Controlled; DocumentContentOverride = $src.Override; EditableSource = $src.Source; EditableSourceId = $src.SourceId }
-            if ([string]::IsNullOrWhiteSpace($libSrc)) {
-                $stats.LibrariesEmpty++
-                Add-ManifestRow -Obj $l -Status 'Empty' -Message 'Library has no code; no file written' -Extra (@{ Language = $lang.Name; LanguageGuid = $lang.Guid; ReferencedByMimics = $refs } + $tmplCols)
-                continue
-            }
-            $code = ConvertTo-CrLf $libSrc
-            $e = New-Object System.Collections.ArrayList
-            Add-CommonEntries $e $l $lang 'GetScriptSource'
-            if (-not $guid) { Add-Entry $e 'LanguageNote' 'Language GUID could not be read from the stored record' }
-            Add-TemplateEntries $e $l $src
-            Add-Entry $e 'ScriptLines' (Get-LineCount $code)
-            Add-Entry $e 'ScriptChars' $code.Length
-            Add-Entry $e 'ReferencedByMimics' $(if ($SkipMimics) { 'NotChecked (-SkipMimics)' } elseif ($Group -or $Name) { "$refs (in scope only)" } else { $refs })
+            # As for mimics: a failure from here on becomes an Error row instead of ending the export.
             try {
+                $src = Resolve-EditableSource $libDoc.Details
+                $lang = if ($guid) { Get-LanguageInfo $guid } else { @{ Name = 'Unknown'; Comment = '//'; Guid = ''; Defaulted = $false } }
+                $refs = if ($SkipMimics) { '' } else { [int]$libraryUse[$l.FullName] }
+                $tmplCols = @{ ControlledByInstance = $src.Controlled; DocumentContentOverride = $src.Override; EditableSource = $src.Source; EditableSourceId = $src.SourceId }
+                if ([string]::IsNullOrWhiteSpace($libSrc)) {
+                    $stats.LibrariesEmpty++
+                    Add-ManifestRow -Obj $l -Status 'Empty' -Message 'Library has no code; no file written' -Extra (@{ Language = $lang.Name; LanguageGuid = $lang.Guid; ReferencedByMimics = $refs } + $tmplCols)
+                    continue
+                }
+                $code = ConvertTo-CrLf $libSrc
+                $e = New-Object System.Collections.ArrayList
+                Add-CommonEntries $e $l $lang 'GetScriptSource'
+                if (-not $guid) { Add-Entry $e 'LanguageNote' 'Language GUID could not be read from the stored record' }
+                Add-TemplateEntries $e $l $src
+                Add-Entry $e 'ScriptLines' (Get-LineCount $code)
+                Add-Entry $e 'ScriptChars' $code.Length
+                Add-Entry $e 'ReferencedByMimics' $(if ($SkipMimics) { 'NotChecked (-SkipMimics)' } elseif ($Group -or $Name) { "$refs (in scope only)" } else { $refs })
+
                 $file = Get-ExportFileName -FullName $l.FullName -Id $l.Id
                 Write-TextFile -Path (Join-Path $OutputFolder $file) -Text (New-ExportText -Comment $lang.Comment -Entries $e -Script $code)
                 [void]$written.Add($file)
@@ -866,7 +873,7 @@ try {
                 Add-ManifestRow -Obj $l -Status 'Exported' -Message $null -Extra (@{
                     File = $file; Language = $lang.Name; LanguageGuid = $lang.Guid; ScriptLines = (Get-LineCount $code); ScriptChars = $code.Length
                     HasOwnScript = $true; ReferencedByMimics = $refs } + $tmplCols)
-            } catch { Register-Failure $l 'Writing file' $_ }
+            } catch { Register-Failure $l 'Exporting script library' $_ }
         }
         Write-Progress -Activity 'Exporting script libraries' -Completed
     }

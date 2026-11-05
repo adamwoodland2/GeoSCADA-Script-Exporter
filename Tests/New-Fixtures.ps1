@@ -173,12 +173,16 @@ New-Fixture 'T.RC12 Mimic' 'CMimic' 'VBScript' @('Library: T.RC12 Lib',
     'PickAction: L[Layer]/B5[Button] | A | scriptCall | TwoArgs 1, 2 | (none)',
     'PickAction: L[Layer]/B6[Button] | A | scriptCall | LibTwo | x <= 1',
     'PickAction: L[Layer]/B7[Button] | A | scriptCall | TwoArgs | One <= 1, Two',
-    "PickAction: L[Layer]/B8[Button] | A | scriptCall | twoargs | two <= 'b', ONE <= 'a'") @'
+    "PickAction: L[Layer]/B8[Button] | A | scriptCall | twoargs | two <= 'b', ONE <= 'a'",
+    "PickAction: L[Layer]/B9[Button] | A | scriptCall | ArrayArgs | vals <= 1, n <= 2",
+    "PickAction: L[Layer]/B10[Button] | A | scriptCall | ArrayArgs | vals <= 1") @'
 Option Explicit
 Public Sub TwoArgs(One, Two)
     MsgBox "One"
 End Sub
 Sub NoArgs()
+End Sub
+Sub ArrayArgs(vals(), n)
 End Sub
 '@
 New-Fixture 'T.RC12 Lib' 'CScriptLibrary' 'VBScript' @('ReferencedByMimics: 1') @'
@@ -235,6 +239,9 @@ function Other() {
     var app = GetSession(); app.logon();                     // NOT:RC13
     var vx = new ActiveXObject("Serck.ViewXApplication");
     vx.Logon("S", "U", "P");                                 // EXPECT:RC13
+}
+function LogonTypeLib() {
+    App.Logon();                                             // EXPECT:RC13 NOT:JS02
 }
 '@
 

@@ -59,7 +59,8 @@ $rc12 = @($f | Where-Object { $_.FullName -eq 'T.RC12 Mimic' -and $_.Rule -eq 'R
 foreach ($b in @(@('B1', $true, 'second parameter has no value'), @('B2', $false, 'all parameters set'), @('B3', $true, 'no arguments at all'),
                  @('B4', $false, 'function has no parameters'), @('B5', $false, 'inline call with its own arguments'),
                  @('B6', $true, 'library function, ByVal parameter unset'), @('B7', $true, 'parameter named without a value'),
-                 @('B8', $false, 'names differ only in case (VBScript)'))) {
+                 @('B8', $false, 'names differ only in case (VBScript)'),
+                 @('B9', $false, 'array parameter vals() given a value'), @('B10', $true, 'array parameter given, the next one unset'))) {
     $hit = [bool]($rc12 | Where-Object { $_.Detail -like "*$($b[0])``[Button``] calls*" })
     if ($hit -eq $b[1]) { Write-Host "PASS RC12 $($b[0]): $($b[2])" } else { $failed++; Write-Host "FAIL RC12 $($b[0]): $($b[2]) (reported: $hit)" -ForegroundColor Red }
 }
@@ -70,11 +71,19 @@ foreach ($c in @(@('T.RC13 Mimic', 'Sub LogOnThenWork', 'Warning'), @('T.RC13 Mi
                  @('T.RC13 Mimic', 'Sub LogOnUserInIf', 'Info'), @('T.RC13 Mimic', 'Sub LogOffWithElse', 'Warning'),
                  @('T.RC13 Mimic', 'Sub OpenViewX', 'Warning'), @('T.RC13 Mimic', 'Sub Chained', 'Info'),
                  @('T.RC13 JS', 'function LogOnFirst', 'Warning'), @('T.RC13 JS', 'function LogOffLast', 'Info'),
-                 @('T.RC13 JS', 'function Other', 'Info'), @('T.V8 Mimic', 'function Test', 'Warning'))) {
+                 @('T.RC13 JS', 'function Other', 'Info'), @('T.RC13 JS', 'function LogonTypeLib', 'Info'),
+                 @('T.V8 Mimic', 'function Test', 'Warning'))) {
     $hit = @($rc13 | Where-Object { $_.FullName -eq $c[0] -and $_.Detail -like "* in $($c[1]) *" })
     $sev = ($hit | ForEach-Object Severity) -join ','
     if ($hit.Count -eq 1 -and $sev -eq $c[2]) { Write-Host "PASS RC13 $($c[0]) $($c[1]): $($c[2])" }
     else { $failed++; Write-Host "FAIL RC13 $($c[0]) $($c[1]): expected one $($c[2]), got '$sev'" -ForegroundColor Red }
+}
+
+# RC15 severity: Error when the Set variable is then tested with Is Nothing (the article's pattern), Warning otherwise
+$rc15 = @($f | Where-Object { $_.FullName -eq 'T2.Aggregate' -and $_.Rule -eq 'RC15' })
+foreach ($c in @(@('Set y', 'Error'), @('Set h', 'Warning'), @('Set k', 'Warning'))) {
+    $sev = (@($rc15 | Where-Object { $_.Detail -like "$($c[0]) =*" }) | ForEach-Object Severity) -join ','
+    if ($sev -eq $c[1]) { Write-Host "PASS RC15 $($c[0]): $($c[1])" } else { $failed++; Write-Host "FAIL RC15 $($c[0]): expected $($c[1]), got '$sev'" -ForegroundColor Red }
 }
 
 $bad = @($f | Where-Object { $_.FullName -eq 'T.TopLevel No Script' -and $_.Rule -in 'GS02', 'GS03' })
@@ -88,7 +97,7 @@ foreach ($withManifest in $false, $true) {
     & "$here\New-FixturesBatching.ps1" -Out $in -WithManifest:$withManifest
     & $analyser -InputFolder $in -OutputFolder $out 6>$null 3>$null | Out-Null
     $exit = $LASTEXITCODE
-    $f = @(Import-Csv "$out\_ScriptAnalysis.csv" | Where-Object Rule -eq 'RX10')
+    $f = @(Import-Csv "$out\_ScriptAnalysis.csv" | Where-Object Rule -eq 'RC16')
     $all = @(Import-Csv "$out\_ScriptAnalysis.csv")
     $a = @(Import-Csv "$out\_ScriptAnalysis_Actions.csv")
     $i = @(Import-Csv "$out\_ScriptAnalysis_Instances.csv")
@@ -96,7 +105,7 @@ foreach ($withManifest in $false, $true) {
     $issue = { param($Issue, $Name) [bool]($c | Where-Object { $_.Issue -eq $Issue -and ($_.FullName -eq $Name -or $_.File -eq $Name) }) }
     $rawActions = [IO.File]::ReadAllText("$out\_ScriptAnalysis_Actions.csv")
     $checks = [ordered]@{
-        'two RX10 findings (template + overridden instance only)' = ($f.Count -eq 2)
+        'two RC16 findings (template + overridden instance only)' = ($f.Count -eq 2)
         'template finding: Role Template, InstancesFixed 2'       = [bool]($f | Where-Object { $_.FullName -eq 'T3.Tmpl.Symbol' -and $_.Role -eq 'Template' -and $_.InstancesFixed -eq '2' })
         'overridden instance reported on its own'                 = [bool]($f | Where-Object { $_.FullName -eq 'T3.Site3.Symbol' -and $_.Role -eq 'OverriddenInstance' -and $_.InstancesFixed -eq '0' })
         'no findings against instance copies'                     = -not ($f | Where-Object { $_.FullName -in 'T3.Site1.Symbol', 'T3.Site2.Symbol' })
@@ -143,9 +152,9 @@ foreach ($k in $strict.Keys) {
     if ($strict[$k]) { Write-Host "PASS -ManifestOnly $k" } else { $failed++; Write-Host "FAIL -ManifestOnly $k" -ForegroundColor Red }
 }
 
-# --- 4. 1.x rule IDs (RN01-RN28) ----------------------------------------------
-# The map in the analyser ($OldRuleIds, read from its syntax tree) must cover RN01-RN28 once each, point at
-# real rules, never reuse an ID, and agree with the README rules table and the CHANGELOG table.
+# --- 4. Old rule IDs: 1.x (RN01-RN28) and retired (RX10) ------------------------
+# The maps in the analyser ($OldRuleIds, $RetiredRuleIds, read from its syntax tree) must cover RN01-RN28 once
+# each, point at real rules, never reuse an ID, and agree with the README rules table and the CHANGELOG tables.
 $ast = [Management.Automation.Language.Parser]::ParseFile($analyser, [ref]$null, [ref]$null)
 $hashOf = { param($Name)
     $a = $ast.Find({ param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq $Name }, $true)
@@ -154,34 +163,52 @@ $ruleKeys = @((& $hashOf '$Rules').KeyValuePairs | ForEach-Object { $_.Item1.Val
 $oldMap = [ordered]@{}
 foreach ($p in (& $hashOf '$OldRuleIds').KeyValuePairs) {
     $oldMap[$p.Item1.Value] = $p.Item2.Find({ param($n) $n -is [Management.Automation.Language.StringConstantExpressionAst] }, $true).Value }
+$retired = [ordered]@{}
+foreach ($p in (& $hashOf '$RetiredRuleIds').KeyValuePairs) {
+    $retired[$p.Item1.Value] = $p.Item2.Find({ param($n) $n -is [Management.Automation.Language.StringConstantExpressionAst] }, $true).Value }
 $docMap = { param($Text) $m = @{}; foreach ($x in [regex]::Matches($Text, '\| (\w+) \| (RN\d\d) \|')) { $m[$x.Groups[2].Value] = $x.Groups[1].Value }; $m }
-$readme = & $docMap ([IO.File]::ReadAllText((Join-Path (Split-Path -Parent $here) 'README.md')))
+$readmeText = [IO.File]::ReadAllText((Join-Path (Split-Path -Parent $here) 'README.md'))
+$readme = & $docMap $readmeText
 $changelog = @{}; $cl = [IO.File]::ReadAllText((Join-Path (Split-Path -Parent $here) 'CHANGELOG.md'))
-foreach ($x in [regex]::Matches($cl.Substring(0, $cl.IndexOf('### 1.4.0')), '\| (RN\d\d) \| (\w+) \|')) { $changelog[$x.Groups[1].Value] = $x.Groups[2].Value }
+# The 2.0.0 table records the IDs as they were then (RN21 -> RX10); a retired ID there resolves to its current one.
+$t200 = $cl.IndexOf('### 2.0.0')
+foreach ($x in [regex]::Matches($cl.Substring($t200, $cl.IndexOf('### 1.4.0') - $t200), '\| (RN\d\d) \| (\w+) \|')) {
+    $v = $x.Groups[2].Value; if ($retired.Contains($v)) { $v = $retired[$v] }; $changelog[$x.Groups[1].Value] = $v }
 $want = @(1..28 | ForEach-Object { 'RN{0:D2}' -f $_ })
 $old = [ordered]@{
     'map covers RN01-RN28'                   = ((@($oldMap.Keys) -join ',') -eq ($want -join ','))
     'map points at real rules, once each'    = (@($oldMap.Values | Where-Object { $ruleKeys -ccontains $_ } | Sort-Object -Unique).Count -eq 28)
     'no rule ID starts with RN'              = -not ($ruleKeys | Where-Object { $_ -like 'RN*' })
-    'only RC14a / RC14b and GS have no 1.x ID' = ((@($ruleKeys | Where-Object { $oldMap.Values -notcontains $_ -and $_ -notlike 'GS*' }) -join ',') -eq 'RC14a,RC14b')
+    'only RC14a / RC14b / RC15 and GS have no 1.x ID' = ((@($ruleKeys | Where-Object { $oldMap.Values -notcontains $_ -and $_ -notlike 'GS*' }) -join ',') -eq 'RC14a,RC14b,RC15')
     'README 1.x rule column matches'         = ($readme.Count -eq 28 -and -not ($want | Where-Object { $readme[$_] -cne $oldMap[$_] }))
     'CHANGELOG 2.0.0 table matches'          = ($changelog.Count -eq 28 -and -not ($want | Where-Object { $changelog[$_] -cne $oldMap[$_] }))
+    'retired IDs are not current rule IDs'   = ($retired.Count -gt 0 -and -not ($retired.Keys | Where-Object { $ruleKeys -ccontains $_ }))
+    'retired IDs point at real rules'        = -not ($retired.Values | Where-Object { $ruleKeys -cnotcontains $_ })
+    'README lists every retired ID'          = -not ($retired.Keys | Where-Object { -not $readmeText.Contains("was $_") })
+    'CHANGELOG records every retired ID' = -not ($retired.Keys | Where-Object { $cl -notmatch "\| $_ \| $($retired[$_]) \|" })
 }
-# -IncludeRule / -ExcludeRule translate a 1.x ID (RN21 = RX10); an unknown ID still stops the run
+# -IncludeRule / -ExcludeRule translate a 1.x ID (RN21 = RC16) and a retired ID (RX10 = RC16); an unknown ID stops the run
 $t3 = Join-Path $WorkFolder 'fixtures_t3'; $out = Join-Path $WorkFolder 'fixtures_t3_old'
 & $analyser -InputFolder $t3 -OutputFolder $out -IncludeRule RN21 6>$null 3>$null | Out-Null
 $incl = @(Import-Csv "$out\_ScriptAnalysis.csv")
 $html = [IO.File]::ReadAllText("$out\_ScriptAnalysis.html")
 & $analyser -InputFolder $t3 -OutputFolder $out -ExcludeRule RN21 6>$null 3>$null | Out-Null
 $excl = @(Import-Csv "$out\_ScriptAnalysis.csv")
+& $analyser -InputFolder $t3 -OutputFolder $out -IncludeRule RX10 6>$null 3>$null | Out-Null
+$inclRx = @(Import-Csv "$out\_ScriptAnalysis.csv")
+& $analyser -InputFolder $t3 -OutputFolder $out -ExcludeRule RX10 6>$null 3>$null | Out-Null
+$exclRx = @(Import-Csv "$out\_ScriptAnalysis.csv")
 $unknown = $false
 try { & $analyser -InputFolder $t3 -OutputFolder $out -IncludeRule RN29 6>$null 3>$null | Out-Null } catch { $unknown = $_.Exception.Message -like "Unknown rule 'RN29'*" }
-$old['-IncludeRule RN21 runs RX10 only']        = ($incl.Count -gt 0 -and -not ($incl | Where-Object Rule -ne 'RX10'))
-$old['-ExcludeRule RN21 leaves RX10 out']       = ($excl.Count -gt 0 -and -not ($excl | Where-Object Rule -eq 'RX10'))
-$old['HTML report shows the 1.x ID (RX10 was RN21)'] = $html.Contains('"o":"RN21"')
+$old['-IncludeRule RN21 runs RC16 only']        = ($incl.Count -gt 0 -and -not ($incl | Where-Object Rule -ne 'RC16'))
+$old['-ExcludeRule RN21 leaves RC16 out']       = ($excl.Count -gt 0 -and -not ($excl | Where-Object Rule -eq 'RC16'))
+$old['-IncludeRule RX10 (retired) runs RC16 only'] = ($inclRx.Count -gt 0 -and -not ($inclRx | Where-Object Rule -ne 'RC16'))
+$old['-ExcludeRule RX10 (retired) leaves RC16 out'] = ($exclRx.Count -gt 0 -and -not ($exclRx | Where-Object Rule -eq 'RC16'))
+$old['HTML report shows the 1.x ID (RC16 was RN21)']    = $html.Contains('"o":"RN21"')
+$old['HTML report shows the retired ID (RC16 was RX10)'] = $html.Contains('"p":"RX10"')
 $old['unknown rule ID RN29 is an error']        = $unknown
 foreach ($k in $old.Keys) {
-    if ($old[$k]) { Write-Host "PASS 1.x rule IDs: $k" } else { $failed++; Write-Host "FAIL 1.x rule IDs: $k" -ForegroundColor Red }
+    if ($old[$k]) { Write-Host "PASS old rule IDs: $k" } else { $failed++; Write-Host "FAIL old rule IDs: $k" -ForegroundColor Red }
 }
 
 if ($failed) { Write-Host "$failed failure(s)." -ForegroundColor Red; exit 1 }

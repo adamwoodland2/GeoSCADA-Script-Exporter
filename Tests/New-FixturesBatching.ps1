@@ -11,7 +11,7 @@ function New-T3([string]$FullName, [string]$File, [hashtable]$Tmpl, [string]$Scr
              @("' ScriptStartLine: $start", "' ScriptEndLine: $($start + $bl - 1)", "' ===== GEOSCADA-SCRIPT-EXPORT END =====", $body)
     [IO.File]::WriteAllText((Join-Path $Out $File), ($lines -join "`r`n"), $utf8)
 }
-$script = "Sub S()`r`n    v = CLng(GetRegistry(""Key""))       ' EXPECT:RX10`r`nEnd Sub"
+$script = "Sub S()`r`n    v = CLng(GetRegistry(""Key""))       ' EXPECT:RC16`r`nEnd Sub"
 New-T3 'T3.Tmpl.Symbol' 'T3.Tmpl.Symbol.txt' @{ InTemplate = 'True'; Controlled = 'False'; Override = 'False'; Source = 'T3.Tmpl.Symbol'; InPlace = 'True' } $script
 New-T3 'T3.Site1.Symbol' 'T3.Site1.Symbol.txt' @{ InTemplate = 'False'; Controlled = 'True'; Override = 'False'; Source = 'T3.Tmpl.Symbol'; InPlace = 'False' } $script
 New-T3 'T3.Site2.Symbol' 'T3.Site2.Symbol.txt' @{ InTemplate = 'False'; Controlled = 'True'; Override = 'False'; Source = 'T3.Tmpl.Symbol'; InPlace = 'False' } $script

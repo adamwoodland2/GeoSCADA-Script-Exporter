@@ -7,13 +7,15 @@
 ' (or, for RC06a / RC06b / RC07, to look wrong) and the After step to work. Every step reports its
 ' result in a message box; an error in one step does not stop the run. A summary is shown at the end.
 '
-' Issue IDs match GeoSCADA-Script-Analyser.ps1 2.0.0 and later: RC = the numbered items of the Resource
+' Issue IDs match GeoSCADA-Script-Analyser.ps1 2.1.0 and later: RC = the numbered items of the Resource
 ' Centre (Knowledge Base) article "Adjustments for VBScript in Geo SCADA 2025 R2", JS = its JScript
-' section, RX = other 2025 R2 changes. (Analyser 1.x used RN01-RN28; see the README rules table.)
+' section, RX = other 2025 R2 changes. (Analyser 1.x used RN01-RN28, and 2.x called RC16 RX10; see the
+' README rules table.)
 ' The only database objects used are ones that always exist - this mimic (Server.ThisObject) and the
-' root group (Id 0) - plus RC01's test point, which is looked for first.
-' RC01 needs an Internal Analog Point called "Test Analog" in the same group as this mimic, and writes
-' its value. If the point is not there, you are asked whether to carry on without RC01 or stop.
+' root group (Id 0) - plus the RC01 / RC15 test point, which is looked for first.
+' RC01 and RC15 need an Internal Analog Point called "Test Analog" in the same group as this mimic, with
+' no control configured. RC01 writes its value; RC15 only tests whether it has a Control aggregate. If
+' the point is not there, you are asked whether to carry on without RC01 and RC15 or stop.
 ' RC06b is a visual check, like RC06a / RC07: look at the list box's scroll bar.
 ' RC09 is the exception: its Before step fails in every version (the IsNull test never worked).
 ' RC11 writes and reads registry key "Claude Examples - Date" (ViewX's own registry area).
@@ -21,15 +23,16 @@
 ' buttons of its own calling RC12_PickAction - see the RC12 section below.
 ' RC13 is not part of Run_Examples either: in 2025 R2 a log on stops the script, which would end the
 ' run there. It needs two buttons of its own, calling RC13_Before and RC13_After.
-' RX10 reads registry key "Claude Examples - Never Set", which must never be set.
+' RC16 reads registry key "Claude Examples - Never Set", which must never be set.
 ' Expected behaviours marked "(to confirm)" come from the release notes or a field report and have
 ' not yet been observed side by side on both versions.
 Option Explicit
 
-Dim Results
+Dim Results, TestPoint      ' TestPoint: the "Test Analog" point, or Nothing (set by RC01_Run)
 
 Public Sub Run_Examples()
     Results = ""
+    Set TestPoint = Nothing
     If Not RC01_Run() Then Exit Sub
     RC02_Before : RC02_After
     RC03_Before : RC03_After
@@ -42,9 +45,14 @@ Public Sub Run_Examples()
     Results = Results & "RC12: run from its own two buttons (see RC12_PickAction in the script)" & vbCrLf
     Results = Results & "RC13: run from its own two buttons (RC13_Before and RC13_After)" & vbCrLf
     RC14_Before : RC14_After
+    If TestPoint Is Nothing Then
+        Results = Results & "RC15: skipped - no test point" & vbCrLf
+    Else
+        RC15_Before TestPoint : RC15_After TestPoint
+    End If
+    RC16_Before : RC16_After
     JS01_Before : JS01_After
     RX01_Before : RX01_After
-    RX10_Before : RX10_After
     MsgBox Results, vbInformation, "Geo SCADA 2025 R2 script examples - summary"
 End Sub
 
@@ -78,7 +86,7 @@ Function RC01_Run()
     If p Is Nothing Then
         msg = "RC01 needs an Internal Analog Point called:" & vbCrLf & pointName & vbCrLf & vbCrLf
         msg = msg & "It was not found. RC01 writes the point's value, so never use a real tag." & vbCrLf & vbCrLf
-        msg = msg & "OK - carry on without RC01" & vbCrLf
+        msg = msg & "OK - carry on without RC01 and RC15" & vbCrLf
         msg = msg & "Cancel - stop here, so you can create the point and run the examples again"
         If MsgBox(msg, vbOKCancel + vbQuestion, "Geo SCADA 2025 R2 script examples") = vbCancel Then
             RC01_Run = False
@@ -86,6 +94,7 @@ Function RC01_Run()
             Results = Results & "RC01: skipped - no test point " & pointName & vbCrLf
         End If
     Else
+        Set TestPoint = p
         RC01_Before p : RC01_After p : RC01_Read p
     End If
 End Function
@@ -412,6 +421,61 @@ Sub RC14_After()
 End Sub
 
 '----------------------------------------------------------------------------------------------
+' RC15 - Testing for an aggregate (Knowledge Base #15: Changes to checking an Aggregate, e.g. to test
+' for Controls)
+' Before 2025 R2 a script could Set a variable to the aggregate and test it with Is Nothing. In 2025 R2
+' the article says to omit the Set and test with IsObject.
+' Uses the "Test Analog" point (see RC01), which should have no control configured; it is only read.
+'----------------------------------------------------------------------------------------------
+Sub RC15_Before(p)
+    Dim y, s
+    On Error Resume Next
+    Set y = p.Interface.Control
+    If y Is Nothing Then
+        s = "has no control"
+    Else
+        s = "has control"
+    End If
+    Report "RC15", "Before", Err.Number, Err.Description, _
+        "Set y = x.Interface.Control : If y Is Nothing Then" & vbCrLf & "Expected: OK before 2025 R2 (" & s & "); error or wrong answer in 2025 R2 (to confirm)."
+End Sub
+
+Sub RC15_After(p)
+    Dim y, s
+    On Error Resume Next
+    y = p.Interface.Control
+    If Not IsObject(y) Then
+        s = "has no control"
+    Else
+        s = "has control"
+    End If
+    Report "RC15", "After", Err.Number, Err.Description, _
+        "y = x.Interface.Control : If Not IsObject(y) Then" & vbCrLf & "Expected: OK in 2025 R2 (" & s & "); before 2025 R2 to confirm."
+End Sub
+
+'----------------------------------------------------------------------------------------------
+' RC16 - GetRegistry without a default value (Knowledge Base #16: GetRegistry returns Null if there is
+' no default; first found in the field; RX10 in analyser 2.x)
+' A key that has not been set comes back as Null, which in 2025 R2 cannot be used as a string, so
+' converting it fails. Pass a default, or test the result with IsNull.
+'----------------------------------------------------------------------------------------------
+Sub RC16_Before()
+    Dim n
+    On Error Resume Next
+    n = CLng(GetRegistry("Claude Examples - Never Set"))
+    Report "RC16", "Before", Err.Number, Err.Description, _
+        "n = CLng(GetRegistry(""Claude Examples - Never Set""))" & vbCrLf & "Expected: OK before 2025 R2 (to confirm); conversion error in 2025 R2."
+End Sub
+
+Sub RC16_After()
+    Dim n
+    On Error Resume Next
+    n = CLng(GetRegistry("Claude Examples - Never Set", 0))
+    Report "RC16", "After", Err.Number, Err.Description, _
+        "n = CLng(GetRegistry(""Claude Examples - Never Set"", 0))" & vbCrLf & "Expected: OK in all versions (n = " & n & ")."
+End Sub
+
+'----------------------------------------------------------------------------------------------
 ' JS01 - ScriptControl COM object (Knowledge Base: Specific JScript Issues; release notes p23)
 ' ScriptControl (msscript.ocx) is 32-bit and not recommended. Do the work in the script itself.
 '----------------------------------------------------------------------------------------------
@@ -452,24 +516,4 @@ Sub RX01_After()
     Set o = CreateObject("ADODB.Connection")
     Report "RX01", "After", Err.Number, Err.Description, _
         "CreateObject(""ADODB.Connection"")  - 32 and 64-bit" & vbCrLf & "Expected: OK in all versions."
-End Sub
-
-'----------------------------------------------------------------------------------------------
-' RX10 - GetRegistry without a default value (2025 R2 runtime, found in the field)
-' A key that has not been set comes back as Null / an empty string, which fails when converted.
-'----------------------------------------------------------------------------------------------
-Sub RX10_Before()
-    Dim n
-    On Error Resume Next
-    n = CLng(GetRegistry("Claude Examples - Never Set"))
-    Report "RX10", "Before", Err.Number, Err.Description, _
-        "n = CLng(GetRegistry(""Claude Examples - Never Set""))" & vbCrLf & "Expected: OK before 2025 R2 (to confirm); conversion error in 2025 R2."
-End Sub
-
-Sub RX10_After()
-    Dim n
-    On Error Resume Next
-    n = CLng(GetRegistry("Claude Examples - Never Set", 0))
-    Report "RX10", "After", Err.Number, Err.Description, _
-        "n = CLng(GetRegistry(""Claude Examples - Never Set"", 0))" & vbCrLf & "Expected: OK in all versions (n = " & n & ")."
 End Sub
